@@ -92,23 +92,10 @@ class DicomViewerEngine {
     loader.external.cornerstone = cs;
     loader.external.dicomParser = parser;
 
-    // Rutas absolutas a partir de la URL de la página: sirven igual en
-    // localhost y en GitHub Pages (https://usuario.github.io/Web_Dicom_Medical/).
-    const base = document.baseURI;
-
-    loader.webWorkerManager.initialize({
-      maxWebWorkers: Math.max(1, (navigator.hardwareConcurrency || 2) - 1),
-      startWebWorkersOnDemand: true,
-      webWorkerPath: new URL("js/vendor/cornerstoneWADOImageLoaderWebWorker.min.js", base).href,
-      taskConfiguration: {
-        decodeTask: {
-          codecsPath: new URL("js/vendor/cornerstoneWADOImageLoaderCodecs.min.js", base).href,
-          initializeCodecsOnStartup: false,
-          usePDFJS: false,
-          strict: false,
-        },
-      },
-    });
+    // Usamos la build "NoWebWorkers" del loader: decodifica en el hilo principal,
+    // por lo que no hay que configurar rutas de workers ni de códecs.
+    // Para imágenes sueltas es más que suficiente. Si más adelante abres series
+    // enormes o muy comprimidas, se puede migrar a la build con workers.
 
     DicomViewerEngine.#loaderConfigurado = true;
   }

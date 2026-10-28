@@ -31,12 +31,11 @@ descargar "https://unpkg.com/cornerstone-core@${CS_VERSION}/dist/cornerstone.min
           "cornerstone.min.js"
 descargar "https://unpkg.com/dicom-parser@${PARSER_VERSION}/dist/dicomParser.min.js" \
           "dicomParser.min.js"
-descargar "https://unpkg.com/cornerstone-wado-image-loader@${LOADER_VERSION}/dist/cornerstoneWADOImageLoader.min.js" \
-          "cornerstoneWADOImageLoader.min.js"
-descargar "https://unpkg.com/cornerstone-wado-image-loader@${LOADER_VERSION}/dist/cornerstoneWADOImageLoaderWebWorker.min.js" \
-          "cornerstoneWADOImageLoaderWebWorker.min.js"
-descargar "https://unpkg.com/cornerstone-wado-image-loader@${LOADER_VERSION}/dist/cornerstoneWADOImageLoaderCodecs.min.js" \
-          "cornerstoneWADOImageLoaderCodecs.min.js"
+# Build "NoWebWorkers": un solo archivo con todo incluido (códecs y dicomParser).
+# Decodifica en el hilo principal, así que no necesita rutas de workers ni de códecs.
+# (En la 4.13.2 ya no existen los archivos sueltos .min.js / WebWorker / Codecs.)
+descargar "https://unpkg.com/cornerstone-wado-image-loader@${LOADER_VERSION}/dist/cornerstoneWADOImageLoaderNoWebWorkers.bundle.min.js" \
+          "cornerstoneWADOImageLoaderNoWebWorkers.bundle.min.js"
 
 echo
 echo "✅ Listo. Archivos en $DEST:"
