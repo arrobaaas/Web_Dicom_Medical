@@ -1,0 +1,69 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>PACS Web - Web_Dicom_Medical</title>
+
+    <!-- Tailwind CSS (CDN) -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {},
+            },
+        };
+    </script>
+
+    <!-- Estilos personalizados -->
+    <link rel="stylesheet" href="css/style.css" />
+</head>
+<body class="bg-gray-100 min-h-screen flex flex-col font-sans">
+
+    <!-- Header -->
+    <header class="bg-blue-700 text-white shadow-md">
+        <div class="max-w-7xl mx-auto px-4 py-4 flex items-center justify-between">
+            <h1 class="text-2xl font-bold">🏥 PACS Web</h1>
+            <p class="text-blue-100">Gestión y visualización de imágenes DICOM</p>
+        </div>
+    </header>
+
+    <main class="flex-1 max-w-7xl w-full mx-auto px-4 py-8 space-y-10">
+
+        <!-- LISTA CLÍNICA -->
+        <section id="lista-clinica" class="bg-white rounded-lg shadow p-6">
+            <h2 class="text-xl font-semibold mb-4">📋 Lista Clínica de Casos</h2>
+            <div class="overflow-x-auto">
+                <table class="min-w-full text-sm">
+                    <thead class="bg-gray-100 text-gray-700">
+                        <tr>
+                            <th class="px-4 py-2 text-left">ID Paciente</th>
+                            <th class="px-4 py-2 text-left">Modalidad</th>
+                            <th class="px-4 py-2 text-left">Patología</th>
+                            <th class="px-4 py-2 text-left">Acción</th>
+                        </tr>
+                    </thead>
+                    <!-- tbody renderizado por AppUIController -->
+                    <tbody id="tabla-cuerpo" class="divide-y divide-gray-200"></tbody>
+                </table>
+            </div>
+        </section>
+
+        <!-- VISOR DICOM -->
+        <section id="visor-dicom" class="bg-white rounded-lg shadow p-6">
+            <h2 class="text-xl font-semibold mb-4">🖼️ Visor DICOM</h2>
+            <div class="w-full h-96 bg-black rounded">
+                <canvas id="visor-dicom-canvas" class="w-full h-full"></canvas>
+            </div>
+        </section>
+
+    </main>
+
+    <footer class="text-center text-sm text-gray-500 py-4">
+        <p>PACS Web - Proyecto educativo</p>
+    </footer>
+
+    <!-- Punto de entrada de la app (módulos ES) -->
+    <script type="module" src="js/main.js"></script>
+</body>
+</html>
