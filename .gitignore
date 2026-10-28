@@ -1,0 +1,18 @@
+# Dependencias
+node_modules/
+
+# Build / distribución
+dist/
+build/
+
+# Variables de entorno
+.env
+.env.*
+!.env.example
+
+# Logs
+*.log
+
+# Editores
+.vscode/
+.idea/
