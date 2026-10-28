@@ -1,6 +1,8 @@
 -- ============================================================
 -- Fase 2: Esquema inicial de la tabla `pacientes`
 -- + bucket de Storage para archivos DICOM
+-- + caso de prueba para el visor (Fase 4)
+-- Este archivo es idempotente: se puede ejecutar completo varias veces.
 -- ============================================================
 
 -- 1. Tabla principal de pacientes / casos clínicos
@@ -44,3 +46,16 @@ ON CONFLICT (id) DO NOTHING;
 DROP POLICY IF EXISTS "dicom_public_read" ON storage.objects;
 CREATE POLICY "dicom_public_read" ON storage.objects
     FOR SELECT USING (bucket_id = 'dicom');
+
+-- ============================================================
+-- 6. Caso de prueba (Fase 4)
+--    IMPORTANTE: el archivo debe subirse a mano en
+--    Supabase -> Storage -> bucket 'dicom' con EXACTAMENTE este nombre:
+--    pac-001.dcm
+--    ON CONFLICT evita duplicados si re-ejecutas el script.
+-- ============================================================
+INSERT INTO public.pacientes
+    (paciente_id_anonimo, modalidad, patologia, descripcion_clinica, archivo_dicom_path)
+VALUES
+    ('PAC-001', 'TAC', 'Neumonía basal derecha', 'Caso de prueba para el visor DICOM', 'pac-001.dcm')
+ON CONFLICT (paciente_id_anonimo) DO NOTHING;
