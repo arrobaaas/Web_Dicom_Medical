@@ -10,6 +10,10 @@
  * Recibe un cliente de Supabase (instancia de `@supabase/supabase-js`) a través
  * del constructor, de esta forma la capa de datos queda desacoplada del dominio.
  */
+
+/** Nombre del bucket de Storage donde viven los archivos .dcm (privado). */
+const DICOM_BUCKET = "dicom";
+
 class SupabaseRepository {
   /**
    * @param {Object} supabaseClient Cliente de Supabase (con .from() y .storage).
@@ -81,22 +85,44 @@ class SupabaseRepository {
   }
 
   // ---------------------------------------------------------
-  // 2. Storage: archivos .dicom
+  // 2. Storage: archivos .dcm
   // --------------------------------------------------------
 
   /** Sube un archivo .dcm al bucket 'dicom'. */
   async subirDicom(fileName, file) {
     const { data, error } = await this.client.storage
-      .from("dicom")
+      .from(DICOM_BUCKET)
       .upload(fileName, file);
 
     if (error) throw new Error(`Error al subir DICOM ${fileName}: ${error.message}`);
     return data;
   }
 
-  /** Genera la URL pública (o firmada) de un archivo DICOM. */
-  obtenerUrlDicom(fileName) {
-    return this.client.storage.from("dicom").getPublicUrl(fileName);
+  /**
+   * Genera una URL FIRMADA (temporal) para descargar un .dcm.
+   *
+   * El bucket 'dicom' es privado (public = false en schema.sql), por lo que
+   * getPublicUrl() NO sirve: devolvería una URL que responde 400/404.
+   * createSignedUrl() sí funciona porque la política `dicom_public_read`
+   * permite SELECT sobre storage.objects de ese bucket.
+   *
+   * OJO: este método ahora es ASÍNCRONO y devuelve un string (la URL).
+   *
+   * @param {string} filePath Ruta del archivo dentro del bucket (archivo_dicom_path).
+   * @param {number} [expiraEnSegundos=3600] Vigencia de la URL.
+   * @returns {Promise<string>} URL firmada lista para el visor.
+   */
+  async obtenerUrlDicom(filePath, expiraEnSegundos = 3600) {
+    if (!filePath) {
+      throw new Error("obtenerUrlDicom: este caso no tiene archivo DICOM asociado.");
+    }
+
+    const { data, error } = await this.client.storage
+      .from(DICOM_BUCKET)
+      .createSignedUrl(filePath, expiraEnSegundos);
+
+    if (error) throw new Error(`Error al firmar URL de ${filePath}: ${error.message}`);
+    return data.signedUrl;
   }
 }
 
