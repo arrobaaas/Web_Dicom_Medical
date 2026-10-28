@@ -17,6 +17,7 @@ import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 import PatientModel from './patient-model.js';
 import SupabaseRepository from './supabase-repository.js';
 import { AppUIController } from './app-ui-controller.js';
+import DicomViewerEngine from './dicom-viewer-engine.js';
 
 // Configuración de Supabase (proyecto: fbkasxnzaaedcatuimgt)
 const SUPABASE_URL = 'https://fbkasxnzaaedcatuimgt.supabase.co';
@@ -26,12 +27,15 @@ const supabase = createClient(SUPABASE_ANON_KEY, SUPABASE_URL);
 
 const supabaseRepository = new SupabaseRepository(supabase);
 
+const dicomViewerEngine = new DicomViewerEngine(document.getElementById('visor-dicom-canvas'));
+
 const appController = new AppUIController({
     patientModel: PatientModel,
     supabaseRepository: supabaseRepository,
     elementos: {
         tablaCuerpo: document.getElementById('tabla-cuerpo'),
     },
+    dicomViewerEngine: dicomViewerEngine,
 });
 
 // Inicialización de la app

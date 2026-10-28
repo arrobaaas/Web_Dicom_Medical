@@ -17,11 +17,13 @@ class AppUIController {
    * @param {PatientModel} opciones.patientModel Modelo de dominio (inyección).
    * @param {SupabaseRepository} opciones.supabaseRepository Repositorio de datos (inyección).
    * @param {Object} [opciones.elementos] Referencias del DOM.
+   * @param {DicomViewerEngine} [opciones.dicomViewerEngine] Motor del visor DICOM (inyección).
    */
-  constructor({ patientModel, supabaseRepository, elementos = {} }) {
+  constructor({ patientModel, supabaseRepository, elementos = {}, dicomViewerEngine = null }) {
     this.patientModel = patientModel;
     this.supabaseRepository = supabaseRepository;
     this.elementos = elementos;
+    this.dicomViewerEngine = dicomViewerEngine;
 
     // Cache de pacientes renderizados
     this.pacientes = [];
@@ -74,8 +76,8 @@ class AppUIController {
       `;
 
       // Delegación de eventos: un solo listener para todos los botones
-      tr.querySelector(".btn-ver-dicom")?.addEventListener("click", () => {
-        this.navegarAlVisor(paciente);
+      tr.querySelector(".btn-ver-dicom")?.addEventListener("click", async () => {
+        await this.navegarAlVisor(paciente, this.dicomViewerEngine);
       });
 
       tbody.appendChild(tr);
@@ -89,9 +91,19 @@ class AppUIController {
   }
 
   /** Navega a la vista del visor DICOM para un paciente. */
-  navegarAlVisor(paciente) {
-    // TODO (Fase 4): integración con DicomViewerEngine
-    console.log("Ver DICOM del paciente:", paciente.toJSON());
+  async navegarAlVisor(paciente, dicomViewerEngine) {
+    const engine = dicomViewerEngine || this.dicomViewerEngine;
+    if (!engine) {
+      console.warn("AppUIController: no hay visor DICOM configurado.");
+      return;
+    }
+    try {
+      const image = await engine.renderDicom(paciente.archivoDicomPath);
+      // TODO (Fase 4): renderizar la imagen en el canvas del visor
+      console.log("Visor DICOM listo:", image);
+    } catch (error) {
+      console.error("Error al cargar DICOM del paciente:", error.message);
+    }
   }
 }
 
