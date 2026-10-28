@@ -51,10 +51,49 @@
 
         <!-- VISOR DICOM -->
         <section id="visor-dicom" class="bg-white rounded-lg shadow p-6">
-            <h2 class="text-xl font-semibold mb-4">🖼️ Visor DICOM</h2>
-            <div class="w-full h-96 bg-black rounded">
-                <canvas id="visor-dicom-canvas" class="w-full h-full"></canvas>
+            <div class="flex flex-wrap items-center justify-between gap-3 mb-4">
+                <div>
+                    <h2 class="text-xl font-semibold">🖼️ Visor DICOM</h2>
+                    <!-- Caso abierto (lo escribe AppUIController) -->
+                    <p id="visor-dicom-info" class="text-sm text-gray-600"></p>
+                </div>
+
+                <!-- Barra de herramientas (la conecta AppUIController) -->
+                <div id="visor-toolbar" class="flex flex-wrap items-center gap-2 text-sm">
+                    <button type="button" data-accion="zoom-in" aria-label="Acercar"
+                            class="px-3 py-1 rounded bg-gray-200 hover:bg-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-400">Zoom +</button>
+                    <button type="button" data-accion="zoom-out" aria-label="Alejar"
+                            class="px-3 py-1 rounded bg-gray-200 hover:bg-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-400">Zoom −</button>
+                    <button type="button" data-accion="invertir"
+                            class="px-3 py-1 rounded bg-gray-200 hover:bg-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-400">Invertir</button>
+                    <button type="button" data-accion="reset"
+                            class="px-3 py-1 rounded bg-gray-200 hover:bg-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-400">Restablecer</button>
+                    <select id="visor-preset" aria-label="Ventana de TAC"
+                            class="px-2 py-1 rounded border border-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-400">
+                        <option value="">Ventana (solo TAC)</option>
+                        <option value="pulmon">Pulmón</option>
+                        <option value="mediastino">Mediastino</option>
+                        <option value="hueso">Hueso</option>
+                        <option value="cerebro">Cerebro</option>
+                    </select>
+                </div>
             </div>
+
+            <div class="relative w-full h-96 bg-black rounded overflow-hidden">
+                <!-- Ahora es un DIV: Cornerstone crea el <canvas> por dentro.
+                     (Se mantiene el id para no romper main.js) -->
+                <div id="visor-dicom-canvas" class="absolute inset-0 touch-none select-none"></div>
+                <div id="visor-dicom-overlay"
+                     class="absolute top-2 left-2 text-xs text-green-400 font-mono whitespace-pre pointer-events-none"></div>
+                <div id="visor-dicom-estado"
+                     class="absolute inset-0 flex items-center justify-center px-4 text-center text-gray-400 pointer-events-none">
+                    Elige un caso de la lista y pulsa «Ver DICOM»
+                </div>
+            </div>
+
+            <p class="text-xs text-gray-500 mt-2">
+                Clic izquierdo y arrastrar: contraste y brillo · Clic derecho y arrastrar: mover · Rueda: zoom
+            </p>
         </section>
 
     </main>
@@ -62,6 +101,12 @@
     <footer class="text-center text-sm text-gray-500 py-4">
         <p>PACS Web - Proyecto educativo</p>
     </footer>
+
+    <!-- Cornerstone (legacy) + loader, servidos en local desde js/vendor/.
+         Son scripts clásicos: deben ir ANTES del módulo main.js y en este orden. -->
+    <script src="js/vendor/cornerstone.min.js"></script>
+    <script src="js/vendor/dicomParser.min.js"></script>
+    <script src="js/vendor/cornerstoneWADOImageLoader.min.js"></script>
 
     <!-- Punto de entrada de la app (módulos ES) -->
     <script type="module" src="js/main.js"></script>
