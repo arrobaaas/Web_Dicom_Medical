@@ -1,26 +1,61 @@
 # 🏥 Web_Dicom_Medical — PACS Web App
 
 Plataforma web tipo PACS (Picture Archiving and Communication System) para la
-gestión y visualización de imágenes médicas en formato DICOM.
+gestión y visualización de imágenes médicas en formato DICOM, orientada a
+estudiantes de ciencias de la salud.
 
 ## Objetivo
 Permitir el listado de casos clínicos con:
-- **ID de paciente**
-- **Modalidad** (RX, TAC, MRI, etc.)
-- **Patología** (Neumonía, Neoplasia, etc.)
+- **ID anónimo de paciente** (ej. `PAC-001`)
+- **Modalidad** (RX, TAC, MRI, US, NM, PT, OTHER)
+- **Patología** y **descripción clínica**
 
-...junto con la visualización de los archivos `.dcm` asociados.
+...junto con la visualización de los archivos `.dcm` asociados directamente en
+el navegador (windowing, zoom, pan, inversión y presets de ventana para TAC).
 
 ## Stack
-- Frontend: HTML5, CSS3, Tailwind CSS
-- Visor médico: Cornerstone.js / DWV (Canvas)
+- Paradigma: Programación Orientada a Objetos (clases ES6+, módulos ES)
+- Frontend: HTML5, CSS3, Tailwind CSS (CDN)
+- Visor médico: Cornerstone.js (legacy) en Canvas, encapsulado en `DicomViewerEngine`
 - Backend / Cloud: Supabase (PostgreSQL + Storage + Auth)
-- Deploy: GitHub Pages
+- Deploy: GitHub Pages (estático)
+
+## Arquitectura (clases)
+| Clase | Archivo | Responsabilidad |
+|-------|---------|-----------------|
+| `PatientModel` | `js/patient-model.js` | Modelo de dominio de un caso clínico |
+| `SupabaseRepository` | `js/supabase-repository.js` | Queries a `pacientes` y archivos en Storage |
+| `DicomViewerEngine` | `js/dicom-viewer-engine.js` | Carga y manipulación de la imagen DICOM |
+| `AppUIController` | `js/app-ui-controller.js` | Eventos del DOM, tabla y visor |
+
+`js/main.js` instancia las clases e inyecta las dependencias.
+
+## Puesta en marcha
+1. **Librerías del visor** (se sirven en local desde `js/vendor/`):
+   ```bash
+   bash scripts/descargar-vendor.sh
+   ```
+2. **Supabase:** en el panel del proyecto → *SQL Editor*, ejecuta
+   `supabase/schema.sql` completo (es idempotente).
+3. **Archivo de prueba:** en *Storage* → bucket `dicom`, sube un `.dcm` con el
+   nombre exacto `pac-001.dcm`.
+4. **Servidor local** (los módulos ES no funcionan abriendo el HTML con `file://`):
+   ```bash
+   python3 -m http.server 8000
+   ```
+   y abre <http://localhost:8000>.
+
+## Seguridad
+- La anon key de `js/main.js` es pública por diseño; lo que protege los datos
+  son las políticas RLS de `supabase/schema.sql`.
+- Lectura de casos y archivos: cualquiera. Escritura (crear, editar, borrar,
+  subir): solo usuarios autenticados.
+- Usa solo estudios **anonimizados**: nunca subas DICOM con datos reales de pacientes.
 
 ## Estado del proyecto
 - [x] Fase 1 — Repositorio Git/GitHub inicializado
-- [ ] Fase 2 — Base de datos y Storage en Supabase
-- [ ] Fase 3 — Modelos base y render de lista clínica
-- [ ] Fase 4 — Visor DICOM (`DicomViewerEngine`)
-- [ ] Fase 5 — Subida / autenticación
-- [ ] Fase 6 — Deploy en GitHub Pages
+- [x] Fase 2 — Base de datos y Storage en Supabase (tabla, RLS, bucket privado)
+- [x] Fase 3 — `PatientModel`, `SupabaseRepository` y tabla de pacientes
+- [x] Fase 4 — Visor DICOM (`DicomViewerEngine`)
+- [ ] Fase 5 — Autenticación y subida de `.dcm` con metadatos
+- [ ] Fase 6 — Deploy en GitHub Pages y pruebas
