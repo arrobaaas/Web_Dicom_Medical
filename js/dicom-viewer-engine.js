@@ -101,6 +101,49 @@ class DicomViewerEngine {
     DicomViewerEngine.#loaderConfigurado = true;
   }
 
+  // --- Inspección de archivos locales (antes de subirlos) ---------------------
+  /**
+   * Lee la cabecera de un .dcm local sin mostrarlo.
+   * Comprueba la firma "DICM" (bytes 128-131 de un DICOM Part 10) y extrae
+   * los datos útiles para el formulario y para detectar datos identificativos.
+   *
+   * @param {File} archivo
+   * @returns {Promise<object>} { modalidadDicom, nombrePaciente, idPaciente,
+   *   fechaNacimiento, descripcionEstudio, regionAnatomica }
+   * @throws {DicomViewerError} Si no es un DICOM válido.
+   */
+  static async inspeccionarArchivo(archivo) {
+    if (!window.dicomParser) {
+      throw new DicomViewerError("dicomParser no está cargado (revisa js/vendor/).");
+    }
+
+    const bytes = new Uint8Array(await archivo.arrayBuffer());
+    const firma = String.fromCharCode(...bytes.subarray(128, 132));
+    if (firma !== "DICM") {
+      throw new DicomViewerError(
+        "El archivo no es un DICOM válido (no tiene la firma «DICM»)."
+      );
+    }
+
+    let ds;
+    try {
+      // untilTag: se detiene antes de los píxeles; solo interesa la cabecera.
+      ds = window.dicomParser.parseDicom(bytes, { untilTag: "x7fe00010" });
+    } catch (err) {
+      throw new DicomViewerError("No se pudo leer la cabecera DICOM.", err);
+    }
+
+    const tag = (t) => ds.string(t)?.trim() || null;
+    return {
+      modalidadDicom: tag("x00080060"),
+      nombrePaciente: tag("x00100010"),
+      idPaciente: tag("x00100020"),
+      fechaNacimiento: tag("x00100030"),
+      descripcionEstudio: tag("x00081030"),
+      regionAnatomica: tag("x00180015"),
+    };
+  }
+
   // --- API pública: carga ----------------------------------------------------
   /**
    * Descarga y muestra un archivo .dcm.

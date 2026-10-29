@@ -18,6 +18,8 @@ import PatientModel from './patient-model.js';
 import SupabaseRepository from './supabase-repository.js';
 import AppUIController from './app-ui-controller.js';
 import DicomViewerEngine from './dicom-viewer-engine.js';
+import AuthService from './auth-service.js';
+import CaseFormController from './case-form-controller.js';
 
 // Configuración de Supabase (proyecto: fbkasxnzaaedcatuimgt)
 // La anon key está pensada para ser pública: lo que protege tus datos son las
@@ -28,6 +30,7 @@ const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBh
 // OJO: el orden correcto es (URL, KEY). Antes estaban invertidos.
 const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 const supabaseRepository = new SupabaseRepository(supabase);
+const authService = new AuthService(supabase);
 
 // Referencias del DOM
 const elementos = {
@@ -73,5 +76,40 @@ const appController = new AppUIController({
     dicomViewerEngine,
 });
 
+// Fase 5: sesión y alta de casos
+const byId = (id) => document.getElementById(id);
+const caseFormController = new CaseFormController({
+    authService,
+    supabaseRepository,
+    patientModel: PatientModel,
+    inspector: DicomViewerEngine,
+    elementos: {
+        btnLogin:            byId('btn-login'),
+        sesionActiva:        byId('sesion-activa'),
+        sesionEmail:         byId('sesion-email'),
+        btnNuevoCaso:        byId('btn-nuevo-caso'),
+        btnLogout:           byId('btn-logout'),
+        dialogoLogin:        byId('dialogo-login'),
+        formLogin:           byId('form-login'),
+        errorLogin:          byId('login-error'),
+        btnEnviarLogin:      byId('btn-enviar-login'),
+        dialogoSubida:       byId('dialogo-subida'),
+        formSubida:          byId('form-subida'),
+        inputArchivo:        byId('subida-archivo'),
+        inputId:             byId('subida-id'),
+        selectModalidad:     byId('subida-modalidad'),
+        infoArchivo:         byId('subida-info'),
+        avisoIdentificativo: byId('subida-aviso'),
+        errorSubida:         byId('subida-error'),
+        btnEnviarSubida:     byId('btn-enviar-subida'),
+    },
+    obtenerIdsExistentes: () => appController.pacientes.map((p) => p.pacienteIdAnonimo),
+    // Tras crear un caso: recargar la lista y abrirlo directamente en el visor
+    onCasoCreado: async (fila) => {
+        await appController.cargarYRenderizar();
+        appController.abrirPorId(fila.id);
+    },
+});
+
 // Inicialización de la app (los módulos ES ya se ejecutan con el DOM listo)
-await appController.cargarYRenderizar();
+await Promise.all([caseFormController.iniciar(), appController.cargarYRenderizar()]);

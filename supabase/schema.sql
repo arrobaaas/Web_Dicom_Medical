@@ -58,6 +58,14 @@ INSERT INTO storage.buckets (id, name, public)
 VALUES ('dicom', 'dicom', false)
 ON CONFLICT (id) DO NOTHING;
 
+-- 4b. Límites del bucket aplicados por el servidor (Fase 5): aunque alguien
+--     salte la validación del navegador, Storage rechaza archivos de más de
+--     50 MB o con otro tipo MIME (la app sube con contentType application/dicom).
+UPDATE storage.buckets
+SET file_size_limit = 52428800,
+    allowed_mime_types = ARRAY['application/dicom']
+WHERE id = 'dicom';
+
 -- 5. Políticas del bucket 'dicom' sobre storage.objects
 --    (PostgreSQL no permite IF NOT EXISTS en CREATE POLICY, por eso usamos DROP primero)
 

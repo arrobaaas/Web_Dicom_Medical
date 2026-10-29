@@ -201,6 +201,15 @@ class AppUIController {
     }
   }
 
+  /**
+   * Abre en el visor el caso con ese UUID (si está en la lista cargada).
+   * @param {string} id UUID del paciente.
+   */
+  abrirPorId(id) {
+    const paciente = this.pacientes.find((p) => p.id === id);
+    if (paciente) this.navegarAlVisor(paciente);
+  }
+
   /** Conecta los botones de la toolbar y el selector de ventana con el motor. */
   #enlazarToolbar() {
     const { visorToolbar, visorPreset } = this.elementos;

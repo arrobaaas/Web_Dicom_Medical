@@ -14,6 +14,12 @@
 /** Nombre del bucket de Storage donde viven los archivos .dcm (privado). */
 const DICOM_BUCKET = "dicom";
 
+/** Tamaño máximo de un .dcm (límite del plan gratuito de Supabase Storage). */
+const MAX_DICOM_BYTES = 50 * 1024 * 1024;
+
+/** Código de PostgreSQL para violación de UNIQUE. */
+const PG_UNIQUE_VIOLATION = "23505";
+
 class SupabaseRepository {
   /**
    * @param {Object} supabaseClient Cliente de Supabase (con .from() y .storage).
@@ -60,6 +66,9 @@ class SupabaseRepository {
       .select()
       .single();
 
+    if (error?.code === PG_UNIQUE_VIOLATION) {
+      throw new Error(`Ya existe un caso con el ID ${paciente.paciente_id_anonimo}.`);
+    }
     if (error) throw new Error(`Error al crear paciente: ${error.message}`);
     return data;
   }
@@ -88,14 +97,61 @@ class SupabaseRepository {
   // 2. Storage: archivos .dcm
   // --------------------------------------------------------
 
-  /** Sube un archivo .dcm al bucket 'dicom'. */
+  /**
+   * Comprueba que un archivo se puede subir (no vacío, dentro del límite).
+   * El contenido DICOM se valida antes con DicomViewerEngine.inspeccionarArchivo().
+   * @param {File} file
+   * @throws {Error}
+   */
+  validarArchivoDicom(file) {
+    if (!file || typeof file.size !== "number" || file.size === 0) {
+      throw new Error("Selecciona un archivo DICOM.");
+    }
+    if (file.size > MAX_DICOM_BYTES) {
+      const mb = (file.size / 1024 / 1024).toFixed(1);
+      throw new Error(`El archivo pesa ${mb} MB; el máximo es ${MAX_DICOM_BYTES / 1024 / 1024} MB.`);
+    }
+  }
+
+  /** Sube un archivo .dcm al bucket 'dicom' (requiere sesión iniciada). */
   async subirDicom(fileName, file) {
+    this.validarArchivoDicom(file);
     const { data, error } = await this.client.storage
       .from(DICOM_BUCKET)
-      .upload(fileName, file);
+      .upload(fileName, file, { contentType: "application/dicom", upsert: false });
 
     if (error) throw new Error(`Error al subir DICOM ${fileName}: ${error.message}`);
     return data;
+  }
+
+  /** Borra un archivo del bucket 'dicom'. */
+  async eliminarDicom(fileName) {
+    const { error } = await this.client.storage.from(DICOM_BUCKET).remove([fileName]);
+    if (error) throw new Error(`Error al borrar DICOM ${fileName}: ${error.message}`);
+  }
+
+  /**
+   * Registra un caso completo: sube el .dcm y crea la fila en `pacientes`.
+   * Si la inserción falla, se borra el archivo recién subido para no dejar
+   * huérfanos en Storage.
+   *
+   * @param {Object} paciente Payload validado (PatientModel.validarNuevoCaso).
+   * @param {File} file Archivo .dcm.
+   * @returns {Promise<Object>} Fila creada.
+   */
+  async registrarCaso(paciente, file) {
+    // Nombre aleatorio: evita colisiones y no expone datos del paciente en la ruta.
+    const ruta = `casos/${crypto.randomUUID()}.dcm`;
+    await this.subirDicom(ruta, file);
+
+    try {
+      return await this.crearPaciente({ ...paciente, archivo_dicom_path: ruta });
+    } catch (error) {
+      await this.eliminarDicom(ruta).catch((e) =>
+        console.error("No se pudo limpiar el archivo huérfano:", e.message)
+      );
+      throw error;
+    }
   }
 
   /**
