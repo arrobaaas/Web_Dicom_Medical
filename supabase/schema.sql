@@ -1,7 +1,7 @@
 -- ============================================================
 -- Fase 2: Esquema inicial de la tabla `pacientes`
 -- + bucket de Storage para archivos DICOM
--- + caso de prueba para el visor (Fase 4)
+-- + casos de prueba para el visor (Fase 4: corte suelto; serie / volumen)
 -- Este archivo es idempotente: se puede ejecutar completo varias veces.
 -- ============================================================
 
@@ -60,10 +60,12 @@ ON CONFLICT (id) DO NOTHING;
 
 -- 4b. Límites del bucket aplicados por el servidor (Fase 5): aunque alguien
 --     salte la validación del navegador, Storage rechaza archivos de más de
---     50 MB o con otro tipo MIME (la app sube con contentType application/dicom).
+--     50 MB o con otro tipo MIME. La app sube con contentType application/dicom;
+--     application/octet-stream se admite porque es el tipo que suele enviar el
+--     panel de Supabase al subir .dcm a mano.
 UPDATE storage.buckets
 SET file_size_limit = 52428800,
-    allowed_mime_types = ARRAY['application/dicom']
+    allowed_mime_types = ARRAY['application/dicom', 'application/octet-stream']
 WHERE id = 'dicom';
 
 -- 5. Políticas del bucket 'dicom' sobre storage.objects
@@ -96,7 +98,7 @@ CREATE POLICY "dicom_delete" ON storage.objects
     USING (bucket_id = 'dicom');
 
 -- ============================================================
--- 6. Caso de prueba (Fase 4)
+-- 6. Caso de prueba 1: corte suelto (Fase 4)
 --    IMPORTANTE: el archivo debe subirse a mano en
 --    Supabase -> Storage -> bucket 'dicom' con EXACTAMENTE este nombre:
 --    pac-001.dcm
@@ -110,6 +112,27 @@ VALUES
      'pac-001.dcm')
 -- DO UPDATE: si la fila ya existía con otros datos, se corrigen para que
 -- coincidan con el archivo real (un TAC de cerebro).
+ON CONFLICT (paciente_id_anonimo) DO UPDATE SET
+    modalidad           = EXCLUDED.modalidad,
+    patologia           = EXCLUDED.patologia,
+    descripcion_clinica = EXCLUDED.descripcion_clinica,
+    archivo_dicom_path  = EXCLUDED.archivo_dicom_path;
+
+-- ============================================================
+-- 7. Caso de prueba 2: serie / volumen (tumor de Pancoast, 29 cortes)
+--    IMPORTANTE: los cortes deben subirse a mano en
+--    Supabase -> Storage -> bucket 'dicom' dentro de la carpeta:
+--    casos/pancoast/   (corte_001.dcm ... corte_029.dcm)
+--    Los archivos están en volumenes/PANCOAST_DICOM/ (no en volumenes/PANCOAST/,
+--    que son los PNG originales).
+--    La "/" final de archivo_dicom_path indica a la app que es una serie.
+-- ============================================================
+INSERT INTO public.pacientes
+    (paciente_id_anonimo, modalidad, patologia, descripcion_clinica, archivo_dicom_path)
+VALUES
+    ('PAC-002', 'TAC', 'Tumor de Pancoast derecho',
+     'Masa apical pulmonar derecha. Recorre los cortes desde el vértice pulmonar hacia caudal.',
+     'casos/pancoast/')
 ON CONFLICT (paciente_id_anonimo) DO UPDATE SET
     modalidad           = EXCLUDED.modalidad,
     patologia           = EXCLUDED.patologia,
