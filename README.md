@@ -6,6 +6,10 @@
 
 [![Demo en vivo](https://img.shields.io/badge/demo-en%20vivo-0ea5e9?style=for-the-badge)](https://arrobaaas.github.io/Web_Dicom_Medical/)
 
+[![CI](https://github.com/arrobaaas/Web_Dicom_Medical/actions/workflows/ci.yml/badge.svg)](https://github.com/arrobaaas/Web_Dicom_Medical/actions/workflows/ci.yml)
+![Tests](https://img.shields.io/badge/tests-81%20pasando-22c55e)
+![Cobertura](https://img.shields.io/badge/cobertura-89%25-22c55e)
+
 ![JavaScript](https://img.shields.io/badge/JavaScript-ES2022-f7df1e?logo=javascript&logoColor=black)
 ![Supabase](https://img.shields.io/badge/Supabase-PostgreSQL%20·%20Storage%20·%20Auth-3ecf8e?logo=supabase&logoColor=white)
 ![Cornerstone](https://img.shields.io/badge/Cornerstone.js-DICOM-1e293b)
@@ -24,6 +28,7 @@
 - [Arquitectura](#arquitectura)
 - [Decisiones técnicas](#decisiones-técnicas)
 - [Seguridad](#seguridad)
+- [Tests y calidad](#tests-y-calidad)
 - [Modelo de datos](#modelo-de-datos)
 - [Ejecutar en local](#ejecutar-en-local)
 - [Estructura del proyecto](#estructura-del-proyecto)
@@ -114,6 +119,30 @@ flowchart LR
 - **Validación en el cliente:** firma `DICM`, cabecera legible y aviso si aparecen nombre o fecha de nacimiento. Si falla la creación de la fila, los archivos ya subidos se borran para no dejar huérfanos.
 - **Sin XSS:** todo el contenido dinámico se inserta como texto.
 
+## Tests y calidad
+
+**81 tests** con [Vitest](https://vitest.dev) y jsdom, **~89 % de cobertura de líneas** y ESLint. GitHub Actions ejecuta todo en cada push y pull request ([`ci.yml`](.github/workflows/ci.yml)).
+
+La inyección de dependencias permite probar cada clase **sin red ni navegador**: Supabase, Cornerstone y el inspector de archivos se sustituyen por dobles de prueba ([`tests/helpers/`](tests/helpers)). Algunos casos que cubren los tests:
+
+| Área | Qué se verifica |
+|---|---|
+| **Seguridad** | Un `<img onerror>` guardado en la base de datos se muestra como texto y no se ejecuta (XSS). |
+| **Integridad de datos** | Si la inserción falla a mitad de una subida, se borran **solo** los archivos ya subidos; nada se sube si un archivo no valida. |
+| **Condiciones de carrera** | Una carga lenta que llega tarde no sustituye a la imagen más reciente. |
+| **Visor** | La rueda avanza 1 corte por clic (y acumula los deltas pequeños de un trackpad); Ctrl + rueda hace zoom; cambiar de corte conserva zoom y ventana. |
+| **W/L** | El selector muestra la ventana *real* (original, preset o personalizada), no la última elegida. |
+| **DICOM** | Se lee la cabecera de archivos generados en memoria y se rechaza un PNG renombrado a `.dcm`. |
+| **Anonimización** | No hay falsos avisos con «Anonymized» o «^»; sí con un nombre o fecha de nacimiento reales. |
+
+```bash
+npm install        # dependencias de desarrollo (solo para tests y lint)
+npm test           # tests
+npm run lint       # ESLint
+npm run check      # lint + tests (lo mismo que la CI)
+npm run test:coverage
+```
+
 ## Modelo de datos
 
 Tabla `public.pacientes` (definida en [`supabase/schema.sql`](supabase/schema.sql); el script es idempotente):
@@ -144,6 +173,8 @@ python3 -m http.server 8000
 # -> http://localhost:8000
 ```
 
+La app en sí no necesita Node: es HTML, CSS y JS servidos tal cual. Node solo hace falta para los [tests](#tests-y-calidad).
+
 **Configurar tu propio Supabase:**
 1. Cambia `SUPABASE_URL` y `SUPABASE_ANON_KEY` en `js/main.js`.
 2. En *SQL Editor*, ejecuta [`supabase/schema.sql`](supabase/schema.sql) completo. Crea la tabla, las políticas, el bucket y los casos de ejemplo.
@@ -166,15 +197,20 @@ python3 -m http.server 8000
 │   ├── case-form-controller.js  # CaseFormController
 │   ├── auth-service.js          # AuthService
 │   └── vendor/                  # Cornerstone, dicomParser, WADO Image Loader
+├── tests/                       # Vitest + jsdom (un archivo por clase)
+│   └── helpers/                 # Dobles de Supabase y generador de DICOM en memoria
 ├── supabase/schema.sql          # Tabla, RLS, bucket, límites y casos de ejemplo
 ├── scripts/descargar-vendor.sh  # Descarga reproducible de las librerías del visor
+├── .github/workflows/ci.yml     # Lint + tests en cada push / PR
+├── package.json                 # Solo herramientas de desarrollo (Vitest, ESLint)
 └── docs/img/                    # Capturas del README
 ```
 
 ## Hoja de ruta
 
-- [ ] Tests unitarios (Vitest) de `PatientModel` y `SupabaseRepository` con un cliente simulado.
-- [ ] Integración continua con GitHub Actions: lint y tests en cada push.
+- [x] Tests unitarios y de UI (Vitest + jsdom) con dobles de Supabase y Cornerstone.
+- [x] Integración continua con GitHub Actions: lint y tests en cada push.
+- [ ] Tests end-to-end (Playwright) contra la app desplegada.
 - [ ] Migrar a **Cornerstone3D**, el sucesor mantenido de Cornerstone, y añadir reconstrucción multiplanar (MPR).
 - [ ] Herramientas de medición: distancia, ángulo y ROI con densidad media en UH.
 - [ ] Modo quiz: ocultar la patología y que el estudiante proponga un diagnóstico.
