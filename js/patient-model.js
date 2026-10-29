@@ -107,9 +107,75 @@ class PatientModel {
     return this.pacienteIdAnonimo;
   }
 
+  /** Equivalencias código DICOM (0008,0060) -> modalidad de la app. */
+  static #DESDE_DICOM = Object.freeze({
+    CT: "TAC", CR: "RX", DX: "RX", DR: "RX", MG: "RX", RF: "RX", XA: "RX",
+    MR: "MRI", US: "US", NM: "NM", PT: "PT",
+  });
+
+  /**
+   * Traduce el código de modalidad de la cabecera DICOM ('CT', 'MR'...).
+   * @param {string|null} codigo
+   * @returns {string|null} Modalidad de la app, u 'OTHER' si no se reconoce.
+   */
+  static modalidadDesdeCodigoDicom(codigo) {
+    if (!codigo) return null;
+    return PatientModel.#DESDE_DICOM[codigo.toUpperCase()] ?? "OTHER";
+  }
+
+  /**
+   * Siguiente ID anónimo libre con formato PAC-NNN.
+   * @param {string[]} idsExistentes
+   * @returns {string} Ej. "PAC-002" si existe "PAC-001".
+   */
+  static siguienteIdAnonimo(idsExistentes = []) {
+    const numeros = idsExistentes
+      .map((id) => /^PAC-(\d+)$/.exec(id)?.[1])
+      .filter(Boolean)
+      .map(Number);
+    const siguiente = (numeros.length ? Math.max(...numeros) : 0) + 1;
+    return `PAC-${String(siguiente).padStart(3, "0")}`;
+  }
+
+  /**
+   * Valida y normaliza los datos de un caso nuevo (formulario de subida).
+   * @param {Object} datos Campos del formulario (snake_case, como la tabla).
+   * @returns {Object} Payload listo para insertar en `pacientes` (sin archivo_dicom_path).
+   * @throws {Error} Con todos los problemas encontrados, uno por línea.
+   */
+  static validarNuevoCaso({ paciente_id_anonimo, modalidad, patologia, descripcion_clinica }) {
+    const payload = {
+      paciente_id_anonimo: String(paciente_id_anonimo ?? "").trim().toUpperCase(),
+      modalidad: String(modalidad ?? "").trim(),
+      patologia: String(patologia ?? "").trim(),
+      descripcion_clinica: String(descripcion_clinica ?? "").trim() || null,
+    };
+
+    const errores = [];
+    if (!/^[A-Z0-9-]{3,30}$/.test(payload.paciente_id_anonimo)) {
+      errores.push("El ID anónimo debe tener 3-30 caracteres (letras, números y guiones), p. ej. PAC-002.");
+    }
+    if (!PatientModel.MODALIDADES.includes(payload.modalidad)) {
+      errores.push("Elige una modalidad válida.");
+    }
+    if (!payload.patologia) errores.push("La patología es obligatoria.");
+    if (payload.patologia.length > 200) errores.push("La patología no puede superar 200 caracteres.");
+    if ((payload.descripcion_clinica?.length ?? 0) > 2000) {
+      errores.push("La descripción clínica no puede superar 2000 caracteres.");
+    }
+
+    if (errores.length) throw new Error(errores.join("\n"));
+    return payload;
+  }
+
   /** @returns {boolean} true si el caso tiene un archivo .dcm asociado. */
   tieneDicom() {
     return Boolean(this.archivoDicomPath);
+  }
+
+  /** @returns {boolean} true si el caso es una serie (carpeta de cortes). */
+  esSerie() {
+    return this.tieneDicom() && this.archivoDicomPath.endsWith("/");
   }
 
   /**

@@ -7,12 +7,22 @@
  *  - Ejecutar queries contra la tabla `pacientes` (CRUD).
  *  - Gestionar el upload / download de archivos .dcm en Supabase Storage.
  *
+ * Un caso puede tener un único .dcm (archivo_dicom_path = "casos/<uuid>.dcm")
+ * o una serie de cortes en una carpeta (archivo_dicom_path = "casos/<uuid>/",
+ * terminado en "/").
+ *
  * Recibe un cliente de Supabase (instancia de `@supabase/supabase-js`) a través
  * del constructor, de esta forma la capa de datos queda desacoplada del dominio.
  */
 
 /** Nombre del bucket de Storage donde viven los archivos .dcm (privado). */
 const DICOM_BUCKET = "dicom";
+
+/** Tamaño máximo de un .dcm (límite del plan gratuito de Supabase Storage). */
+const MAX_DICOM_BYTES = 50 * 1024 * 1024;
+
+/** Código de PostgreSQL para violación de UNIQUE. */
+const PG_UNIQUE_VIOLATION = "23505";
 
 class SupabaseRepository {
   /**
@@ -60,6 +70,9 @@ class SupabaseRepository {
       .select()
       .single();
 
+    if (error?.code === PG_UNIQUE_VIOLATION) {
+      throw new Error(`Ya existe un caso con el ID ${paciente.paciente_id_anonimo}.`);
+    }
     if (error) throw new Error(`Error al crear paciente: ${error.message}`);
     return data;
   }
@@ -88,14 +101,79 @@ class SupabaseRepository {
   // 2. Storage: archivos .dcm
   // --------------------------------------------------------
 
-  /** Sube un archivo .dcm al bucket 'dicom'. */
+  /**
+   * Comprueba que un archivo se puede subir (no vacío, dentro del límite).
+   * El contenido DICOM se valida antes con DicomViewerEngine.inspeccionarArchivo().
+   * @param {File} file
+   * @throws {Error}
+   */
+  validarArchivoDicom(file) {
+    if (!file || typeof file.size !== "number" || file.size === 0) {
+      throw new Error("Selecciona un archivo DICOM.");
+    }
+    if (file.size > MAX_DICOM_BYTES) {
+      const mb = (file.size / 1024 / 1024).toFixed(1);
+      throw new Error(`El archivo pesa ${mb} MB; el máximo es ${MAX_DICOM_BYTES / 1024 / 1024} MB.`);
+    }
+  }
+
+  /** Sube un archivo .dcm al bucket 'dicom' (requiere sesión iniciada). */
   async subirDicom(fileName, file) {
+    this.validarArchivoDicom(file);
     const { data, error } = await this.client.storage
       .from(DICOM_BUCKET)
-      .upload(fileName, file);
+      .upload(fileName, file, { contentType: "application/dicom", upsert: false });
 
     if (error) throw new Error(`Error al subir DICOM ${fileName}: ${error.message}`);
     return data;
+  }
+
+  /** Borra un archivo del bucket 'dicom'. */
+  async eliminarDicom(fileName) {
+    const { error } = await this.client.storage.from(DICOM_BUCKET).remove([fileName]);
+    if (error) throw new Error(`Error al borrar DICOM ${fileName}: ${error.message}`);
+  }
+
+  /**
+   * Registra un caso completo: sube el/los .dcm y crea la fila en `pacientes`.
+   * - 1 archivo  -> casos/<uuid>.dcm
+   * - n archivos -> casos/<uuid>/corte_001.dcm ... (serie, en el orden recibido)
+   * Si algo falla, se borran los archivos ya subidos para no dejar huérfanos.
+   *
+   * @param {Object} paciente Payload validado (PatientModel.validarNuevoCaso).
+   * @param {File|File[]} archivos Archivo .dcm o cortes de la serie, ya ordenados.
+   * @param {(subidos: number, total: number) => void} [onProgreso]
+   * @returns {Promise<Object>} Fila creada.
+   */
+  async registrarCaso(paciente, archivos, onProgreso = () => {}) {
+    const lista = Array.isArray(archivos) ? archivos : [archivos];
+    if (lista.length === 0) throw new Error("Selecciona al menos un archivo DICOM.");
+    lista.forEach((f) => this.validarArchivoDicom(f));
+
+    // Nombre aleatorio: evita colisiones y no expone datos del paciente en la ruta.
+    const id = crypto.randomUUID();
+    const esSerie = lista.length > 1;
+    const rutaCaso = esSerie ? `casos/${id}/` : `casos/${id}.dcm`;
+    const rutas = esSerie
+      ? lista.map((_, i) => `${rutaCaso}corte_${String(i + 1).padStart(3, "0")}.dcm`)
+      : [rutaCaso];
+
+    const subidas = [];
+    try {
+      for (let i = 0; i < lista.length; i++) {
+        await this.subirDicom(rutas[i], lista[i]);
+        subidas.push(rutas[i]);
+        onProgreso(i + 1, lista.length);
+      }
+      return await this.crearPaciente({ ...paciente, archivo_dicom_path: rutaCaso });
+    } catch (error) {
+      if (subidas.length) {
+        await this.client.storage.from(DICOM_BUCKET).remove(subidas).catch((e) =>
+          console.error("No se pudieron limpiar los archivos huérfanos:", e.message)
+        );
+      }
+      throw error;
+    }
   }
 
   /**
@@ -112,6 +190,42 @@ class SupabaseRepository {
    * @param {number} [expiraEnSegundos=3600] Vigencia de la URL.
    * @returns {Promise<string>} URL firmada lista para el visor.
    */
+  /**
+   * URLs firmadas de todos los cortes de un caso, en orden.
+   * - Ruta de archivo -> [1 URL].
+   * - Ruta de carpeta (termina en "/") -> lista los .dcm por nombre y firma todos.
+   * @param {string} ruta archivo_dicom_path del caso.
+   * @param {number} [expiraEnSegundos=3600]
+   * @returns {Promise<string[]>}
+   */
+  async obtenerUrlsDicom(ruta, expiraEnSegundos = 3600) {
+    if (!ruta) {
+      throw new Error("obtenerUrlsDicom: este caso no tiene archivo DICOM asociado.");
+    }
+    if (!ruta.endsWith("/")) return [await this.obtenerUrlDicom(ruta, expiraEnSegundos)];
+
+    const carpeta = ruta.slice(0, -1);
+    const { data: objetos, error } = await this.client.storage
+      .from(DICOM_BUCKET)
+      .list(carpeta, { limit: 1000, sortBy: { column: "name", order: "asc" } });
+    if (error) throw new Error(`Error al listar la serie ${ruta}: ${error.message}`);
+
+    const rutas = objetos
+      .filter((o) => o.name.toLowerCase().endsWith(".dcm"))
+      .map((o) => `${ruta}${o.name}`)
+      .sort((a, b) => a.localeCompare(b, undefined, { numeric: true }));
+    if (rutas.length === 0) throw new Error(`La serie ${ruta} no contiene archivos .dcm.`);
+
+    const { data: firmadas, error: errorFirma } = await this.client.storage
+      .from(DICOM_BUCKET)
+      .createSignedUrls(rutas, expiraEnSegundos);
+    if (errorFirma) throw new Error(`Error al firmar la serie ${ruta}: ${errorFirma.message}`);
+
+    const fallida = firmadas.find((f) => f.error || !f.signedUrl);
+    if (fallida) throw new Error(`No se pudo firmar ${fallida.path}: ${fallida.error}`);
+    return firmadas.map((f) => f.signedUrl);
+  }
+
   async obtenerUrlDicom(filePath, expiraEnSegundos = 3600) {
     if (!filePath) {
       throw new Error("obtenerUrlDicom: este caso no tiene archivo DICOM asociado.");

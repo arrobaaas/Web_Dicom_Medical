@@ -44,7 +44,18 @@
                     <p class="text-xs text-slate-400">Visor DICOM educativo</p>
                 </div>
             </div>
-            <p class="hidden sm:block text-xs text-slate-500">Solo estudios anonimizados · Uso docente</p>
+            <!-- Sesión (la gestiona CaseFormController) -->
+            <div class="flex items-center gap-2">
+                <button type="button" id="btn-login" class="btn-secundario">Iniciar sesión</button>
+                <div id="sesion-activa" class="flex items-center gap-2" hidden>
+                    <span id="sesion-email" class="hidden md:inline text-xs text-slate-400 max-w-[14rem] truncate"></span>
+                    <button type="button" id="btn-nuevo-caso" class="btn-primario">
+                        <svg viewBox="0 0 24 24" class="h-4 w-4" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>
+                        Nuevo caso
+                    </button>
+                    <button type="button" id="btn-logout" class="btn-secundario">Salir</button>
+                </div>
+            </div>
         </div>
     </header>
 
@@ -122,9 +133,16 @@
 
                     <!-- Overlay en las 4 esquinas, como en las estaciones PACS -->
                     <div class="overlay-esquina top-2 left-3" id="overlay-sup-izq"></div>
-                    <div class="overlay-esquina top-2 right-3 text-right" id="overlay-sup-der"></div>
+                    <div class="overlay-esquina top-2 right-12 text-right" id="overlay-sup-der"></div>
                     <div class="overlay-esquina bottom-2 left-3" id="overlay-inf-izq"></div>
-                    <div class="overlay-esquina bottom-2 right-3 text-right" id="overlay-inf-der"></div>
+                    <div class="overlay-esquina bottom-2 right-12 text-right" id="overlay-inf-der"></div>
+
+                    <!-- Barra de cortes (solo en series): arriba = primer corte (craneal) -->
+                    <div id="visor-cortes" class="absolute top-3 bottom-3 right-2 w-8 flex flex-col items-center gap-2" hidden>
+                        <span id="visor-cortes-texto" class="text-[0.65rem] font-mono text-slate-300 tabular-nums"></span>
+                        <input id="visor-cortes-slider" type="range" min="1" max="1" step="1" value="1"
+                               aria-label="Corte de la serie" class="slider-cortes flex-1" />
+                    </div>
 
                     <div id="visor-dicom-estado"
                          class="absolute inset-0 flex flex-col items-center justify-center gap-3 px-6 text-center text-slate-500 pointer-events-none">
@@ -137,10 +155,87 @@
             <p class="shrink-0 px-4 lg:px-5 pb-3 text-xs text-slate-500">
                 <kbd class="kbd">Clic izq.</kbd> arrastrar: contraste / brillo ·
                 <kbd class="kbd">Clic der.</kbd> arrastrar: mover ·
-                <kbd class="kbd">Rueda</kbd> zoom
+                <kbd class="kbd">Rueda</kbd> / <kbd class="kbd">↑↓</kbd> cambiar corte (series) ·
+                <kbd class="kbd">Ctrl + rueda</kbd> zoom
             </p>
         </section>
     </main>
+
+    <!-- DIÁLOGO: INICIAR SESIÓN -->
+    <dialog id="dialogo-login" class="dialogo" aria-labelledby="titulo-login">
+        <form id="form-login" class="space-y-4">
+            <div>
+                <h2 id="titulo-login" class="text-lg font-semibold text-white">Iniciar sesión</h2>
+                <p class="mt-1 text-sm text-slate-400">Acceso para docentes que suben casos. Ver casos no requiere cuenta.</p>
+            </div>
+            <label class="block space-y-1">
+                <span class="etiqueta">Email</span>
+                <input name="email" type="email" required autocomplete="username" class="campo" />
+            </label>
+            <label class="block space-y-1">
+                <span class="etiqueta">Contraseña</span>
+                <input name="password" type="password" required autocomplete="current-password" class="campo" />
+            </label>
+            <p id="login-error" class="mensaje-error" role="alert" hidden></p>
+            <div class="flex justify-end gap-2 pt-2">
+                <button type="button" data-cerrar class="btn-secundario">Cancelar</button>
+                <button type="submit" id="btn-enviar-login" class="btn-primario">Entrar</button>
+            </div>
+        </form>
+    </dialog>
+
+    <!-- DIÁLOGO: NUEVO CASO (subida de .dcm + metadatos) -->
+    <dialog id="dialogo-subida" class="dialogo max-w-xl" aria-labelledby="titulo-subida">
+        <form id="form-subida" class="space-y-4">
+            <div>
+                <h2 id="titulo-subida" class="text-lg font-semibold text-white">Nuevo caso clínico</h2>
+                <p class="mt-1 text-sm text-slate-400">Sube un estudio anonimizado y describe el caso.</p>
+            </div>
+
+            <label class="block space-y-1">
+                <span class="etiqueta">Archivos DICOM</span>
+                <input id="subida-archivo" name="archivo" type="file" required multiple
+                       accept=".dcm,.dicom,application/dicom" class="campo-archivo" />
+                <span class="block text-xs text-slate-500">Un corte o todos los cortes de una serie (se ordenan por nombre). Máximo 50 MB por archivo. La modalidad se detecta de la cabecera.</span>
+            </label>
+            <p id="subida-info" class="text-xs font-mono text-emerald-400" hidden></p>
+            <p id="subida-aviso" class="mensaje-aviso" role="alert" hidden></p>
+
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <label class="block space-y-1">
+                    <span class="etiqueta">ID anónimo</span>
+                    <input id="subida-id" name="paciente_id_anonimo" required maxlength="30"
+                           pattern="[A-Za-z0-9\-]{3,30}" class="campo font-mono uppercase" />
+                </label>
+                <label class="block space-y-1">
+                    <span class="etiqueta">Modalidad</span>
+                    <!-- Opciones generadas desde PatientModel.MODALIDADES -->
+                    <select id="subida-modalidad" name="modalidad" required class="campo"></select>
+                </label>
+            </div>
+
+            <label class="block space-y-1">
+                <span class="etiqueta">Patología</span>
+                <input name="patologia" required maxlength="200" placeholder="Ej. Neumonía basal derecha" class="campo" />
+            </label>
+            <label class="block space-y-1">
+                <span class="etiqueta">Descripción clínica <span class="text-slate-500 font-normal">(opcional)</span></span>
+                <textarea name="descripcion_clinica" rows="3" maxlength="2000"
+                          placeholder="Hallazgos, contexto clínico, preguntas para el estudiante…" class="campo"></textarea>
+            </label>
+
+            <label class="flex items-start gap-2 text-sm text-slate-300">
+                <input type="checkbox" required class="mt-0.5 h-4 w-4 accent-sky-500" />
+                <span>Confirmo que el estudio está anonimizado y no contiene datos de pacientes reales.</span>
+            </label>
+
+            <p id="subida-error" class="mensaje-error" role="alert" hidden></p>
+            <div class="flex justify-end gap-2 pt-2">
+                <button type="button" data-cerrar class="btn-secundario">Cancelar</button>
+                <button type="submit" id="btn-enviar-subida" class="btn-primario">Subir caso</button>
+            </div>
+        </form>
+    </dialog>
 
     <!-- Cornerstone (legacy) + loader, servidos en local desde js/vendor/.
          Son scripts clásicos: deben ir ANTES del módulo main.js y en este orden. -->
