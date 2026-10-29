@@ -26,7 +26,7 @@
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
 
     <!-- Estilos personalizados -->
-    <link rel="stylesheet" href="css/style.css" />
+    <link rel="stylesheet" href="css/style.css?v=2026.10.28-3" />
 </head>
 <!-- Tema oscuro: es el estándar en estaciones de radiología (el ojo percibe
      mejor los grises de la imagen sobre un entorno oscuro). -->
@@ -243,7 +243,10 @@
     <script src="js/vendor/dicomParser.min.js"></script>
     <script src="js/vendor/cornerstoneWADOImageLoaderNoWebWorkers.bundle.min.js"></script>
 
-    <!-- Punto de entrada de la app (módulos ES) -->
-    <script type="module" src="js/main.js"></script>
+    <!-- Punto de entrada de la app (módulos ES).
+         ?v= evita que el navegador mezcle archivos de versiones distintas
+         (GitHub Pages cachea 10 min). Al publicar cambios, sube la versión
+         aquí, en style.css y en los imports de main.js (mismo valor). -->
+    <script type="module" src="js/main.js?v=2026.10.28-3"></script>
 </body>
 </html>

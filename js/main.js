@@ -14,12 +14,13 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.45.4';
 
 // Clases de dominio, repositorio, visor y UI
-import PatientModel from './patient-model.js';
-import SupabaseRepository from './supabase-repository.js';
-import AppUIController from './app-ui-controller.js';
-import DicomViewerEngine from './dicom-viewer-engine.js';
-import AuthService from './auth-service.js';
-import CaseFormController from './case-form-controller.js';
+// (?v= debe coincidir con el de index.html: ver comentario allí)
+import PatientModel from './patient-model.js?v=2026.10.28-3';
+import SupabaseRepository from './supabase-repository.js?v=2026.10.28-3';
+import AppUIController from './app-ui-controller.js?v=2026.10.28-3';
+import DicomViewerEngine from './dicom-viewer-engine.js?v=2026.10.28-3';
+import AuthService from './auth-service.js?v=2026.10.28-3';
+import CaseFormController from './case-form-controller.js?v=2026.10.28-3';
 
 // Configuración de Supabase (proyecto: fbkasxnzaaedcatuimgt)
 // La anon key está pensada para ser pública: lo que protege tus datos son las
