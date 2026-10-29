@@ -1,106 +1,146 @@
 <!DOCTYPE html>
-<html lang="es">
+<html lang="es" class="h-full">
 <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>PACS Web - Web_Dicom_Medical</title>
 
-    <!-- Tailwind CSS (CDN) -->
-    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Tailwind CSS (CDN, versión fijada) -->
+    <script src="https://cdn.tailwindcss.com/3.4.17"></script>
     <script>
         tailwind.config = {
             theme: {
-                extend: {},
+                extend: {
+                    fontFamily: {
+                        sans: ['Inter', 'ui-sans-serif', 'system-ui', 'sans-serif'],
+                        mono: ['"JetBrains Mono"', 'ui-monospace', 'monospace'],
+                    },
+                },
             },
         };
     </script>
 
+    <!-- Tipografías (con fuentes del sistema como respaldo) -->
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
+
     <!-- Estilos personalizados -->
     <link rel="stylesheet" href="css/style.css" />
 </head>
-<body class="bg-gray-100 min-h-screen flex flex-col font-sans">
+<!-- Tema oscuro: es el estándar en estaciones de radiología (el ojo percibe
+     mejor los grises de la imagen sobre un entorno oscuro). -->
+<body class="h-full bg-slate-950 text-slate-200 font-sans antialiased flex flex-col">
 
     <!-- Header -->
-    <header class="bg-blue-700 text-white shadow-md">
-        <div class="max-w-7xl mx-auto px-4 py-4 flex items-center justify-between">
-            <h1 class="text-2xl font-bold">🏥 PACS Web</h1>
-            <p class="text-blue-100">Gestión y visualización de imágenes DICOM</p>
+    <header class="shrink-0 border-b border-slate-800 bg-slate-900/80">
+        <div class="px-4 lg:px-6 h-14 flex items-center justify-between gap-4">
+            <div class="flex items-center gap-3">
+                <div class="h-8 w-8 rounded-lg bg-sky-500/15 text-sky-400 grid place-items-center" aria-hidden="true">
+                    <svg viewBox="0 0 24 24" class="h-5 w-5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12h4l3-8 4 16 3-8h4"/></svg>
+                </div>
+                <div class="leading-tight">
+                    <h1 class="text-base font-semibold text-white">PACS Web</h1>
+                    <p class="text-xs text-slate-400">Visor DICOM educativo</p>
+                </div>
+            </div>
+            <p class="hidden sm:block text-xs text-slate-500">Solo estudios anonimizados · Uso docente</p>
         </div>
     </header>
 
-    <main class="flex-1 max-w-7xl w-full mx-auto px-4 py-8 space-y-10">
+    <main class="flex-1 min-h-0 grid grid-cols-1 lg:grid-cols-[380px_1fr]">
 
         <!-- LISTA CLÍNICA -->
-        <section id="lista-clinica" class="bg-white rounded-lg shadow p-6">
-            <h2 class="text-xl font-semibold mb-4">📋 Lista Clínica de Casos</h2>
-            <div class="overflow-x-auto">
-                <table class="min-w-full text-sm">
-                    <thead class="bg-gray-100 text-gray-700">
+        <section id="lista-clinica" aria-labelledby="titulo-lista"
+                 class="min-h-0 flex flex-col border-b lg:border-b-0 lg:border-r border-slate-800 bg-slate-900/40">
+            <div class="px-4 lg:px-5 py-4 flex items-center justify-between">
+                <h2 id="titulo-lista" class="text-sm font-semibold uppercase tracking-wider text-slate-400">Casos clínicos</h2>
+                <span id="lista-contador" class="text-xs font-mono text-slate-500"></span>
+            </div>
+            <div class="flex-1 min-h-0 overflow-y-auto px-2 lg:px-3 pb-4">
+                <table class="w-full text-sm border-separate border-spacing-y-1">
+                    <thead class="sr-only">
                         <tr>
-                            <th class="px-4 py-2 text-left">ID Paciente</th>
-                            <th class="px-4 py-2 text-left">Modalidad</th>
-                            <th class="px-4 py-2 text-left">Patología</th>
-                            <th class="px-4 py-2 text-left">Acción</th>
+                            <th>ID Paciente</th>
+                            <th>Modalidad</th>
+                            <th>Patología y descripción clínica</th>
                         </tr>
                     </thead>
                     <!-- tbody renderizado por AppUIController -->
-                    <tbody id="tabla-cuerpo" class="divide-y divide-gray-200"></tbody>
+                    <tbody id="tabla-cuerpo"></tbody>
                 </table>
             </div>
         </section>
 
         <!-- VISOR DICOM -->
-        <section id="visor-dicom" class="bg-white rounded-lg shadow p-6">
-            <div class="flex flex-wrap items-center justify-between gap-3 mb-4">
-                <div>
-                    <h2 class="text-xl font-semibold">🖼️ Visor DICOM</h2>
-                    <!-- Caso abierto (lo escribe AppUIController) -->
-                    <p id="visor-dicom-info" class="text-sm text-gray-600"></p>
+        <section id="visor-dicom" aria-labelledby="titulo-visor" class="min-h-0 flex flex-col">
+
+            <!-- Barra de herramientas (la conecta AppUIController) -->
+            <div class="shrink-0 px-4 lg:px-5 py-3 border-b border-slate-800 flex flex-wrap items-center justify-between gap-3">
+                <div class="min-w-0">
+                    <h2 id="titulo-visor" class="sr-only">Visor DICOM</h2>
+                    <p id="visor-dicom-info" class="text-sm font-medium text-white truncate">Ningún estudio abierto</p>
                 </div>
 
-                <!-- Barra de herramientas (la conecta AppUIController) -->
-                <div id="visor-toolbar" class="flex flex-wrap items-center gap-2 text-sm">
-                    <button type="button" data-accion="zoom-in" aria-label="Acercar"
-                            class="px-3 py-1 rounded bg-gray-200 hover:bg-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-400">Zoom +</button>
-                    <button type="button" data-accion="zoom-out" aria-label="Alejar"
-                            class="px-3 py-1 rounded bg-gray-200 hover:bg-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-400">Zoom −</button>
-                    <button type="button" data-accion="invertir"
-                            class="px-3 py-1 rounded bg-gray-200 hover:bg-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-400">Invertir</button>
-                    <button type="button" data-accion="reset"
-                            class="px-3 py-1 rounded bg-gray-200 hover:bg-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-400">Restablecer</button>
-                    <select id="visor-preset" aria-label="Ventana de TAC"
-                            class="px-2 py-1 rounded border border-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-400">
-                        <option value="">Ventana (solo TAC)</option>
-                        <option value="pulmon">Pulmón</option>
-                        <option value="mediastino">Mediastino</option>
-                        <option value="hueso">Hueso</option>
-                        <option value="cerebro">Cerebro</option>
-                    </select>
+                <div id="visor-toolbar" class="flex flex-wrap items-center gap-2">
+                    <div class="flex rounded-lg bg-slate-800 p-0.5">
+                        <button type="button" data-accion="zoom-out" aria-label="Alejar" title="Alejar" class="btn-tool">
+                            <svg viewBox="0 0 24 24" class="h-4 w-4" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3M8 11h6"/></svg>
+                        </button>
+                        <button type="button" data-accion="zoom-in" aria-label="Acercar" title="Acercar" class="btn-tool">
+                            <svg viewBox="0 0 24 24" class="h-4 w-4" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3M8 11h6M11 8v6"/></svg>
+                        </button>
+                        <button type="button" data-accion="invertir" aria-label="Invertir grises" title="Invertir grises" class="btn-tool">
+                            <svg viewBox="0 0 24 24" class="h-4 w-4" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M12 3a9 9 0 0 1 0 18z" fill="currentColor"/></svg>
+                        </button>
+                        <button type="button" data-accion="reset" aria-label="Restablecer" title="Restablecer zoom, posición y ventana" class="btn-tool">
+                            <svg viewBox="0 0 24 24" class="h-4 w-4" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><path d="M3 3v5h5"/></svg>
+                        </button>
+                    </div>
+
+                    <!-- Ventana (W/L): refleja SIEMPRE la ventana activa real -->
+                    <label class="flex items-center gap-2 text-xs text-slate-400">
+                        <span>Ventana</span>
+                        <select id="visor-preset" disabled
+                                class="rounded-lg bg-slate-800 border border-slate-700 text-slate-100 text-sm px-2 py-1.5 focus:outline-none focus:ring-2 focus:ring-sky-500 disabled:opacity-40">
+                            <option value="original">Original del estudio</option>
+                            <option value="cerebro">Cerebro (80 / 40)</option>
+                            <option value="pulmon">Pulmón (1500 / −600)</option>
+                            <option value="mediastino">Mediastino (350 / 50)</option>
+                            <option value="hueso">Hueso (2000 / 300)</option>
+                            <option value="personalizada" disabled>Personalizada</option>
+                        </select>
+                    </label>
                 </div>
             </div>
 
-            <div class="relative w-full h-96 bg-black rounded overflow-hidden">
-                <!-- Ahora es un DIV: Cornerstone crea el <canvas> por dentro.
-                     (Se mantiene el id para no romper main.js) -->
-                <div id="visor-dicom-canvas" class="absolute inset-0 touch-none select-none"></div>
-                <div id="visor-dicom-overlay"
-                     class="absolute top-2 left-2 text-xs text-green-400 font-mono whitespace-pre pointer-events-none"></div>
-                <div id="visor-dicom-estado"
-                     class="absolute inset-0 flex items-center justify-center px-4 text-center text-gray-400 pointer-events-none">
-                    Elige un caso de la lista y pulsa «Ver DICOM»
+            <!-- Área de la imagen -->
+            <div class="flex-1 min-h-[60vh] lg:min-h-0 p-2 lg:p-3">
+                <div class="relative h-full w-full bg-black rounded-lg overflow-hidden ring-1 ring-slate-800">
+                    <!-- DIV: Cornerstone crea el <canvas> por dentro -->
+                    <div id="visor-dicom-canvas" class="absolute inset-0 touch-none select-none"></div>
+
+                    <!-- Overlay en las 4 esquinas, como en las estaciones PACS -->
+                    <div class="overlay-esquina top-2 left-3" id="overlay-sup-izq"></div>
+                    <div class="overlay-esquina top-2 right-3 text-right" id="overlay-sup-der"></div>
+                    <div class="overlay-esquina bottom-2 left-3" id="overlay-inf-izq"></div>
+                    <div class="overlay-esquina bottom-2 right-3 text-right" id="overlay-inf-der"></div>
+
+                    <div id="visor-dicom-estado"
+                         class="absolute inset-0 flex flex-col items-center justify-center gap-3 px-6 text-center text-slate-500 pointer-events-none">
+                        <svg viewBox="0 0 24 24" class="h-10 w-10 text-slate-700" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="12" cy="12" r="4"/></svg>
+                        <p id="visor-dicom-estado-texto">Selecciona un caso de la lista para abrir su estudio</p>
+                    </div>
                 </div>
             </div>
 
-            <p class="text-xs text-gray-500 mt-2">
-                Clic izquierdo y arrastrar: contraste y brillo · Clic derecho y arrastrar: mover · Rueda: zoom
+            <p class="shrink-0 px-4 lg:px-5 pb-3 text-xs text-slate-500">
+                <kbd class="kbd">Clic izq.</kbd> arrastrar: contraste / brillo ·
+                <kbd class="kbd">Clic der.</kbd> arrastrar: mover ·
+                <kbd class="kbd">Rueda</kbd> zoom
             </p>
         </section>
-
     </main>
-
-    <footer class="text-center text-sm text-gray-500 py-4">
-        <p>PACS Web - Proyecto educativo</p>
-    </footer>
 
     <!-- Cornerstone (legacy) + loader, servidos en local desde js/vendor/.
          Son scripts clásicos: deben ir ANTES del módulo main.js y en este orden. -->

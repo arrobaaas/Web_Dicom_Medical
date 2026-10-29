@@ -11,8 +11,16 @@
  *
  * Nota: la capa de acceso a datos (SupabaseRepository) se encarga de las
  *       peticiones; este modelo es agnóstico y solo expone su estado.
+ *
+ * Sobre `dicomUrl`: el modelo guarda la RUTA del archivo en Storage
+ * (`archivoDicomPath`), no una URL. El bucket es privado y las URLs firmadas
+ * caducan, así que la URL se genera justo antes de abrir el visor con
+ * `SupabaseRepository.obtenerUrlDicom(paciente.archivoDicomPath)`.
  */
 class PatientModel {
+  /** Modalidades admitidas (deben coincidir con el CHECK de supabase/schema.sql). */
+  static MODALIDADES = Object.freeze(["RX", "TAC", "MRI", "US", "NM", "PT", "OTHER"]);
+
   /**
    * @param {Object} params Datos del paciente.
    * @param {string} params.id UUID del registro (PK).
@@ -37,6 +45,9 @@ class PatientModel {
     if (!paciente_id_anonimo) throw new Error("PatientModel: falta el campo obligatorio 'paciente_id_anonimo'.");
     if (!modalidad) throw new Error("PatientModel: falta el campo obligatorio 'modalidad'.");
     if (!patologia) throw new Error("PatientModel: falta el campo obligatorio 'patologia'.");
+    if (!PatientModel.MODALIDADES.includes(modalidad)) {
+      throw new Error(`PatientModel: modalidad no válida '${modalidad}'.`);
+    }
 
     this.id = id;
     this.pacienteIdAnonimo = paciente_id_anonimo;
@@ -94,6 +105,20 @@ class PatientModel {
    */
   getNombrePaciente() {
     return this.pacienteIdAnonimo;
+  }
+
+  /** @returns {boolean} true si el caso tiene un archivo .dcm asociado. */
+  tieneDicom() {
+    return Boolean(this.archivoDicomPath);
+  }
+
+  /**
+   * Los presets de ventana (pulmón, hueso...) usan unidades Hounsfield,
+   * que solo tienen sentido en TAC.
+   * @returns {boolean}
+   */
+  admitePresetsHounsfield() {
+    return this.modalidad === "TAC";
   }
 }
 

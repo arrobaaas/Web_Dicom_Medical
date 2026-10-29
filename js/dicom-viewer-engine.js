@@ -35,10 +35,10 @@ class DicomViewerEngine {
 
   /** Presets de ventana típicos de TAC (unidades Hounsfield). No aplican a RX. */
   static WL_PRESETS = Object.freeze({
-    pulmon: { ww: 1500, wc: -600 },
-    mediastino: { ww: 350, wc: 50 },
-    hueso: { ww: 2000, wc: 300 },
-    cerebro: { ww: 80, wc: 40 },
+    cerebro: { ww: 80, wc: 40, nombre: "Cerebro" },
+    pulmon: { ww: 1500, wc: -600, nombre: "Pulmón" },
+    mediastino: { ww: 350, wc: 50, nombre: "Mediastino" },
+    hueso: { ww: 2000, wc: 300, nombre: "Hueso" },
   });
 
   /** El loader se configura una sola vez por página, aunque haya varias instancias. */
@@ -49,6 +49,7 @@ class DicomViewerEngine {
   #cs; // window.cornerstone
   #loader; // window.cornerstoneWADOImageLoader
   #image = null; // imagen mostrada actualmente
+  #defaultVoi = null; // ventana original del archivo: { ww, wc }
   #loadToken = 0; // evita condiciones de carrera si se hacen clics rápidos
   #drag = null; // arrastre en curso: { modo, x, y }
   #resizeObserver = null;
@@ -118,8 +119,12 @@ class DicomViewerEngine {
       const image = await this.#cs.loadImage(`wadouri:${dicomUrl}`);
       if (token !== this.#loadToken) return false; // llegó tarde: hay una carga más nueva
 
-      this.#cs.displayImage(this.#element, image);
+      // La ventana original (la que trae el propio .dcm) se guarda ANTES de
+      // mostrar la imagen, para que el primer render ya la conozca.
+      const porDefecto = this.#cs.getDefaultViewportForImage(this.#element, image);
+      this.#defaultVoi = { ww: porDefecto.voi.windowWidth, wc: porDefecto.voi.windowCenter };
       this.#image = image;
+      this.#cs.displayImage(this.#element, image);
       return true;
     } catch (err) {
       if (token !== this.#loadToken) return false;
@@ -134,6 +139,7 @@ class DicomViewerEngine {
   clear() {
     this.#loadToken++;
     this.#image = null;
+    this.#defaultVoi = null;
     this.#cs.disable(this.#element);
     this.#cs.enable(this.#element);
     this.#onChange?.(this.getState());
@@ -151,6 +157,11 @@ class DicomViewerEngine {
     vp.voi.windowWidth = Math.max(1, windowWidth);
     vp.voi.windowCenter = windowLevel;
     this.#cs.setViewport(this.#element, vp);
+  }
+
+  /** Vuelve a la ventana original del archivo, sin tocar zoom ni posición. */
+  restoreDefaultWindowing() {
+    if (this.#defaultVoi) this.setWindowing(this.#defaultVoi.ww, this.#defaultVoi.wc);
   }
 
   /** Aplica un preset de WL_PRESETS por nombre ('pulmon', 'hueso', ...). */
@@ -211,6 +222,27 @@ class DicomViewerEngine {
       windowCenter: Math.round(vp.voi.windowCenter),
       scale: vp.scale,
       invert: vp.invert,
+      ventana: this.#ventanaActual(vp),
+    };
+  }
+
+  /**
+   * Metadatos DICOM útiles para el overlay (leídos de la cabecera del archivo).
+   * @returns {object|null} null si no hay imagen cargada.
+   */
+  getMetadata() {
+    if (!this.#image) return null;
+    const ds = this.#image.data; // DataSet de dicomParser (loader wadouri)
+    const tag = (t) => ds?.string(t)?.trim() || null;
+    return {
+      modalidad: tag("x00080060"),
+      regionAnatomica: tag("x00180015"),
+      descripcionEstudio: tag("x00081030"),
+      descripcionSerie: tag("x0008103e"),
+      fechaEstudio: tag("x00080020"), // formato DICOM: AAAAMMDD
+      grosorCorte: tag("x00180050"),
+      filas: this.#image.rows,
+      columnas: this.#image.columns,
     };
   }
 
@@ -230,6 +262,21 @@ class DicomViewerEngine {
   }
 
   // --- Internos ---------------------------------------------------------------
+  /**
+   * Nombre de la ventana activa: 'original', una clave de WL_PRESETS o
+   * 'personalizada'. Así la UI muestra lo que realmente se ve, no el último
+   * preset elegido.
+   */
+  #ventanaActual(vp) {
+    const ww = Math.round(vp.voi.windowWidth);
+    const wc = Math.round(vp.voi.windowCenter);
+    const coincide = (v) => v && Math.round(v.ww) === ww && Math.round(v.wc) === wc;
+
+    if (coincide(this.#defaultVoi)) return "original";
+    const preset = Object.entries(DicomViewerEngine.WL_PRESETS).find(([, v]) => coincide(v));
+    return preset ? preset[0] : "personalizada";
+  }
+
   /** Copia del viewport actual, o null si no hay imagen cargada. */
   #viewport() {
     return this.#image ? this.#cs.getViewport(this.#element) : null;

@@ -1,18 +1,49 @@
 /**
  * Estilos base de la aplicación PACS Web.
- * Tailwind CSS se carga vía CDN; este archivo complementa con estilos
- * personalizados (base, componentes simples, utilidades propias).
+ * Tailwind CSS se carga vía CDN; este archivo complementa con componentes
+ * propios que se repiten en el HTML.
  */
 
-/* Quitar márgenes por defecto del body */
-body {
-    margin: 0;
-    padding: 0;
+/* Botones con icono de la barra del visor */
+.btn-tool {
+    display: grid;
+    place-items: center;
+    height: 2rem;
+    width: 2.25rem;
+    border-radius: 0.375rem;
+    color: #cbd5e1; /* slate-300 */
+    transition: background-color 120ms, color 120ms;
+}
+.btn-tool:hover {
+    background-color: #334155; /* slate-700 */
+    color: #fff;
+}
+.btn-tool:focus-visible {
+    outline: 2px solid #0ea5e9; /* sky-500 */
+    outline-offset: 1px;
 }
 
-/* Tabla clínica: resalte de fila al pasar el cursor */
-#tabla-cuerpo tr:hover {
-    background-color: #f3f4f6;
+/* Textos del overlay sobre la imagen (esquinas) */
+.overlay-esquina {
+    position: absolute;
+    font-family: "JetBrains Mono", ui-monospace, monospace;
+    font-size: 0.72rem;
+    line-height: 1.35;
+    color: #e2e8f0; /* slate-200 */
+    text-shadow: 0 1px 2px #000, 0 0 4px #000;
+    white-space: pre;
+    pointer-events: none;
+}
+
+/* Atajos de ratón en la ayuda */
+.kbd {
+    font-family: inherit;
+    font-size: 0.7rem;
+    padding: 0.05rem 0.35rem;
+    border-radius: 0.25rem;
+    border: 1px solid #334155;
+    background: #1e293b;
+    color: #cbd5e1;
 }
 
 /* Visor DICOM: el canvas que crea Cornerstone debe ocupar todo el contenedor */

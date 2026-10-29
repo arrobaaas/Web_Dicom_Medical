@@ -10,7 +10,8 @@
  */
 
 // Cliente de Supabase (Fase 2)
-import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+// Versión fijada: un rango como "@2" podría cambiar sin aviso y romper la app.
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.45.4';
 
 // Clases de dominio, repositorio, visor y UI
 import PatientModel from './patient-model.js';
@@ -30,13 +31,21 @@ const supabaseRepository = new SupabaseRepository(supabase);
 
 // Referencias del DOM
 const elementos = {
-    tablaCuerpo:  document.getElementById('tabla-cuerpo'),
-    visorSeccion: document.getElementById('visor-dicom'),
-    visorEstado:  document.getElementById('visor-dicom-estado'),
-    visorOverlay: document.getElementById('visor-dicom-overlay'),
-    visorInfo:    document.getElementById('visor-dicom-info'),
-    visorToolbar: document.getElementById('visor-toolbar'),
-    visorPreset:  document.getElementById('visor-preset'),
+    tablaCuerpo:      document.getElementById('tabla-cuerpo'),
+    contador:         document.getElementById('lista-contador'),
+    visorSeccion:     document.getElementById('visor-dicom'),
+    visorEstado:      document.getElementById('visor-dicom-estado'),
+    visorEstadoTexto: document.getElementById('visor-dicom-estado-texto'),
+    visorInfo:        document.getElementById('visor-dicom-info'),
+    visorToolbar:     document.getElementById('visor-toolbar'),
+    visorPreset:      document.getElementById('visor-preset'),
+    // Textos superpuestos en las 4 esquinas de la imagen
+    overlay: {
+        supIzq: document.getElementById('overlay-sup-izq'),
+        supDer: document.getElementById('overlay-sup-der'),
+        infIzq: document.getElementById('overlay-inf-izq'),
+        infDer: document.getElementById('overlay-inf-der'),
+    },
 };
 
 // El visor puede fallar (p. ej. faltan los archivos de js/vendor). Si pasa,
@@ -52,7 +61,7 @@ try {
 } catch (error) {
     console.error('No se pudo inicializar el visor DICOM:', error);
     if (elementos.visorEstado) {
-        elementos.visorEstado.textContent = `⚠️ ${error.message}`;
+        elementos.visorEstadoTexto.textContent = error.message;
         elementos.visorEstado.classList.add('text-red-400');
     }
 }
