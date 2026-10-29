@@ -37,11 +37,16 @@ const elementos = {
     tablaCuerpo:      document.getElementById('tabla-cuerpo'),
     contador:         document.getElementById('lista-contador'),
     visorSeccion:     document.getElementById('visor-dicom'),
+    visorDicomCanvas: document.getElementById('visor-dicom-canvas'),
     visorEstado:      document.getElementById('visor-dicom-estado'),
     visorEstadoTexto: document.getElementById('visor-dicom-estado-texto'),
     visorInfo:        document.getElementById('visor-dicom-info'),
     visorToolbar:     document.getElementById('visor-toolbar'),
     visorPreset:      document.getElementById('visor-preset'),
+    // Barra de cortes (series)
+    cortes:           document.getElementById('visor-cortes'),
+    cortesTexto:      document.getElementById('visor-cortes-texto'),
+    cortesSlider:     document.getElementById('visor-cortes-slider'),
     // Textos superpuestos en las 4 esquinas de la imagen
     overlay: {
         supIzq: document.getElementById('overlay-sup-izq'),

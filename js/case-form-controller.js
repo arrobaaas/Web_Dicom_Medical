@@ -25,7 +25,8 @@ class CaseFormController {
   #onCasoCreado;
 
   #usuario = null;
-  #inspeccion = null; // { archivo, info } del último .dcm inspeccionado
+  #inspeccion = null; // { archivos, info } de la última selección inspeccionada
+  #seleccionToken = 0; // descarta inspecciones de una selección ya reemplazada
 
   /**
    * @param {Object} opciones
@@ -122,21 +123,45 @@ class CaseFormController {
     this.#abrirDialogo(dialogoSubida, errorSubida);
   }
 
-  /** Inspecciona el .dcm en cuanto se elige y rellena la modalidad. */
+  /**
+   * Archivos elegidos, ordenados por nombre con orden "natural"
+   * (corte_2 antes que corte_10): ese será el orden de la serie.
+   */
+  #archivosElegidos() {
+    return [...this.#el.inputArchivo.files].sort((a, b) =>
+      a.name.localeCompare(b.name, undefined, { numeric: true })
+    );
+  }
+
+  /** Inspecciona los .dcm en cuanto se eligen y rellena la modalidad. */
   async #alElegirArchivo() {
-    const { inputArchivo, selectModalidad, errorSubida } = this.#el;
-    const archivo = inputArchivo.files[0];
+    const { selectModalidad, errorSubida } = this.#el;
+    const archivos = this.#archivosElegidos();
+    const token = ++this.#seleccionToken;
     this.#inspeccion = null;
     this.#renderizarInspeccion(null);
     this.#mostrarError(errorSubida, null);
-    if (!archivo) return;
+    if (archivos.length === 0) return;
 
     try {
-      this.#repo.validarArchivoDicom(archivo);
-      const info = await this.#inspector.inspeccionarArchivo(archivo);
-      if (inputArchivo.files[0] !== archivo) return; // se eligió otro mientras tanto
+      // Se inspeccionan TODOS: un solo archivo no DICOM rompería la serie.
+      const infos = [];
+      for (const archivo of archivos) {
+        this.#repo.validarArchivoDicom(archivo);
+        try {
+          infos.push(await this.#inspector.inspeccionarArchivo(archivo));
+        } catch (error) {
+          throw new Error(`${archivo.name}: ${error.message}`);
+        }
+      }
+      if (token !== this.#seleccionToken) return; // se eligió otra cosa mientras tanto
 
-      this.#inspeccion = { archivo, info };
+      const info = { ...infos[0], totalArchivos: archivos.length };
+      // Si algún corte trae nombre / fecha de nacimiento, se avisa igual.
+      info.nombrePaciente = infos.find((i) => i.nombrePaciente)?.nombrePaciente ?? null;
+      info.fechaNacimiento = infos.find((i) => i.fechaNacimiento)?.fechaNacimiento ?? null;
+
+      this.#inspeccion = { archivos, info };
       const modalidad = this.#modelo.modalidadDesdeCodigoDicom(info.modalidadDicom);
       if (modalidad) selectModalidad.value = modalidad;
       this.#renderizarInspeccion(info);
@@ -147,16 +172,21 @@ class CaseFormController {
 
   async #enviarSubida(e) {
     e.preventDefault();
-    const { formSubida, inputArchivo, dialogoSubida, errorSubida, btnEnviarSubida } = this.#el;
+    const { formSubida, dialogoSubida, errorSubida, btnEnviarSubida } = this.#el;
     this.#mostrarError(errorSubida, null);
 
     if (!this.#usuario) {
       this.#mostrarError(errorSubida, "Tu sesión ha caducado. Vuelve a iniciar sesión.");
       return;
     }
-    const archivo = inputArchivo.files[0];
-    if (!archivo || this.#inspeccion?.archivo !== archivo) {
-      this.#mostrarError(errorSubida, "Selecciona un archivo DICOM válido.");
+    const archivos = this.#archivosElegidos();
+    const inspeccionados = this.#inspeccion?.archivos ?? [];
+    const coinciden =
+      archivos.length > 0 &&
+      archivos.length === inspeccionados.length &&
+      archivos.every((a, i) => a === inspeccionados[i]);
+    if (!coinciden) {
+      this.#mostrarError(errorSubida, "Selecciona archivos DICOM válidos.");
       return;
     }
 
@@ -181,7 +211,9 @@ class CaseFormController {
     }
 
     await this.#conCarga(btnEnviarSubida, "Subiendo…", errorSubida, async () => {
-      const fila = await this.#repo.registrarCaso(payload, archivo);
+      const fila = await this.#repo.registrarCaso(payload, archivos, (n, total) => {
+        if (total > 1) btnEnviarSubida.textContent = `Subiendo ${n}/${total}…`;
+      });
       dialogoSubida.close();
       await this.#onCasoCreado(fila);
     });
@@ -207,8 +239,11 @@ class CaseFormController {
     avisoIdentificativo.hidden = true;
     if (!info) return;
 
+    const prefijo = info.totalArchivos > 1
+      ? `Serie DICOM válida · ${info.totalArchivos} cortes · `
+      : "DICOM válido · ";
     infoArchivo.textContent =
-      "DICOM válido · " +
+      prefijo +
       [info.modalidadDicom, info.regionAnatomica, info.descripcionEstudio].filter(Boolean).join(" · ");
 
     // Nombre o fecha de nacimiento en la cabecera = posible dato real.

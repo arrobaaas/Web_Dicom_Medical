@@ -133,9 +133,16 @@
 
                     <!-- Overlay en las 4 esquinas, como en las estaciones PACS -->
                     <div class="overlay-esquina top-2 left-3" id="overlay-sup-izq"></div>
-                    <div class="overlay-esquina top-2 right-3 text-right" id="overlay-sup-der"></div>
+                    <div class="overlay-esquina top-2 right-12 text-right" id="overlay-sup-der"></div>
                     <div class="overlay-esquina bottom-2 left-3" id="overlay-inf-izq"></div>
-                    <div class="overlay-esquina bottom-2 right-3 text-right" id="overlay-inf-der"></div>
+                    <div class="overlay-esquina bottom-2 right-12 text-right" id="overlay-inf-der"></div>
+
+                    <!-- Barra de cortes (solo en series): arriba = primer corte (craneal) -->
+                    <div id="visor-cortes" class="absolute top-3 bottom-3 right-2 w-8 flex flex-col items-center gap-2" hidden>
+                        <span id="visor-cortes-texto" class="text-[0.65rem] font-mono text-slate-300 tabular-nums"></span>
+                        <input id="visor-cortes-slider" type="range" min="1" max="1" step="1" value="1"
+                               aria-label="Corte de la serie" class="slider-cortes flex-1" />
+                    </div>
 
                     <div id="visor-dicom-estado"
                          class="absolute inset-0 flex flex-col items-center justify-center gap-3 px-6 text-center text-slate-500 pointer-events-none">
@@ -148,7 +155,8 @@
             <p class="shrink-0 px-4 lg:px-5 pb-3 text-xs text-slate-500">
                 <kbd class="kbd">Clic izq.</kbd> arrastrar: contraste / brillo ·
                 <kbd class="kbd">Clic der.</kbd> arrastrar: mover ·
-                <kbd class="kbd">Rueda</kbd> zoom
+                <kbd class="kbd">Rueda</kbd> / <kbd class="kbd">↑↓</kbd> cambiar corte (series) ·
+                <kbd class="kbd">Ctrl + rueda</kbd> zoom
             </p>
         </section>
     </main>
@@ -185,10 +193,10 @@
             </div>
 
             <label class="block space-y-1">
-                <span class="etiqueta">Archivo DICOM</span>
-                <input id="subida-archivo" name="archivo" type="file" required
+                <span class="etiqueta">Archivos DICOM</span>
+                <input id="subida-archivo" name="archivo" type="file" required multiple
                        accept=".dcm,.dicom,application/dicom" class="campo-archivo" />
-                <span class="block text-xs text-slate-500">Máximo 50 MB. La modalidad se detecta de la cabecera.</span>
+                <span class="block text-xs text-slate-500">Un corte o todos los cortes de una serie (se ordenan por nombre). Máximo 50 MB por archivo. La modalidad se detecta de la cabecera.</span>
             </label>
             <p id="subida-info" class="text-xs font-mono text-emerald-400" hidden></p>
             <p id="subida-aviso" class="mensaje-aviso" role="alert" hidden></p>

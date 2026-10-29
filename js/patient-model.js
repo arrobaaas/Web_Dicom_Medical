@@ -173,6 +173,11 @@ class PatientModel {
     return Boolean(this.archivoDicomPath);
   }
 
+  /** @returns {boolean} true si el caso es una serie (carpeta de cortes). */
+  esSerie() {
+    return this.tieneDicom() && this.archivoDicomPath.endsWith("/");
+  }
+
   /**
    * Los presets de ventana (pulmón, hueso...) usan unidades Hounsfield,
    * que solo tienen sentido en TAC.

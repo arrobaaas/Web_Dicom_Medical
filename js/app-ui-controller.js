@@ -124,6 +124,13 @@ class AppUIController {
       descripcion.title = paciente.descripcionClinica ?? "";
       tdTexto.append(patologia, descripcion);
 
+      if (paciente.esSerie()) {
+        const chip = document.createElement("p");
+        chip.className = "mt-1 text-[0.7rem] text-sky-400/90";
+        chip.textContent = "Serie · recorrer cortes";
+        tdTexto.appendChild(chip);
+      }
+
       if (!paciente.tieneDicom()) {
         const aviso = document.createElement("p");
         aviso.className = "mt-1 text-[0.7rem] text-amber-400/80";
@@ -192,9 +199,12 @@ class AppUIController {
     }
 
     try {
-      const url = await this.supabaseRepository.obtenerUrlDicom(paciente.archivoDicomPath);
-      const mostrada = await engine.renderDicom(url);
-      if (mostrada) this.#ocultarEstado(); // si devolvió false, otra carga más reciente manda
+      const urls = await this.supabaseRepository.obtenerUrlsDicom(paciente.archivoDicomPath);
+      const mostrada = await engine.renderSerie(urls);
+      if (!mostrada) return; // otra carga más reciente manda
+      this.#ocultarEstado();
+      this.#configurarPresets(paciente, engine.getMetadata());
+      this.elementos.visorDicomCanvas?.focus({ preventScroll: true });
     } catch (error) {
       console.error("Error al cargar DICOM del paciente:", error);
       this.#mostrarEstado(error.message, true);
@@ -212,7 +222,11 @@ class AppUIController {
 
   /** Conecta los botones de la toolbar y el selector de ventana con el motor. */
   #enlazarToolbar() {
-    const { visorToolbar, visorPreset } = this.elementos;
+    const { visorToolbar, visorPreset, cortesSlider } = this.elementos;
+
+    cortesSlider?.addEventListener("input", (e) => {
+      this.dicomViewerEngine?.irACorte(Number(e.target.value) - 1);
+    });
 
     visorToolbar?.addEventListener("click", (e) => {
       const accion = e.target.closest("[data-accion]")?.dataset.accion;
@@ -250,6 +264,8 @@ class AppUIController {
       if (el) el.textContent = lineas.filter(Boolean).join("\n");
     };
 
+    this.#renderizarCortes(estado);
+
     if (!estado.loaded) {
       Object.values(overlay).forEach((el) => escribir(el, []));
       return;
@@ -270,6 +286,7 @@ class AppUIController {
       this.#nombreVentana(estado.ventana),
     ]);
     escribir(overlay.infDer, [
+      estado.totalCortes > 1 ? `Corte ${estado.corte} / ${estado.totalCortes}` : null,
       meta.filas && meta.columnas ? `${meta.columnas} × ${meta.filas}` : null,
       meta.grosorCorte ? `Corte ${meta.grosorCorte} mm` : null,
       `Zoom ${estado.scale.toFixed(2)}×${estado.invert ? "  · Invertido" : ""}`,
@@ -283,15 +300,42 @@ class AppUIController {
   // ---------------------------------------------------------
 
   /**
-   * Los presets usan unidades Hounsfield: solo se habilitan para TAC.
+   * Los presets usan unidades Hounsfield: solo se habilitan para TAC y, una vez
+   * cargada la imagen, solo si el archivo realmente trae valores en UH (las
+   * capturas de pantalla de 8 bits no los tienen).
    * @param {PatientModel} paciente Caso que se va a abrir.
+   * @param {object|null} [meta] Metadatos DICOM (DicomViewerEngine.getMetadata()).
    */
-  #configurarPresets(paciente) {
+  #configurarPresets(paciente, meta = null) {
     const select = this.elementos.visorPreset;
     if (!select) return;
     select.value = "original";
-    select.disabled = !paciente.admitePresetsHounsfield();
-    select.title = select.disabled ? "Los presets de ventana solo aplican a TAC" : "";
+    if (!paciente.admitePresetsHounsfield()) {
+      select.disabled = true;
+      select.title = "Los presets de ventana solo aplican a TAC";
+    } else if (meta && !meta.unidadesHounsfield) {
+      select.disabled = true;
+      select.title = "Esta imagen no tiene unidades Hounsfield (captura de 8 bits)";
+    } else {
+      select.disabled = false;
+      select.title = "";
+    }
+  }
+
+  /** Muestra / oculta la barra de cortes y la sincroniza con el corte actual. */
+  #renderizarCortes(estado) {
+    const { cortes, cortesTexto, cortesSlider } = this.elementos;
+    if (!cortes) return;
+    const esSerie = estado.loaded && estado.totalCortes > 1;
+    cortes.hidden = !esSerie;
+    if (!esSerie) return;
+
+    cortesSlider.max = String(estado.totalCortes);
+    cortesSlider.value = String(estado.corte);
+    cortesTexto.textContent = estado.cortesCargados < estado.totalCortes
+      ? `${Math.round((estado.cortesCargados / estado.totalCortes) * 100)}%`
+      : `${estado.corte}`;
+    cortesTexto.title = `Corte ${estado.corte} de ${estado.totalCortes}`;
   }
 
   /** Texto legible de la ventana activa para el overlay. */

@@ -5,7 +5,8 @@
  *
  * Responsabilidades:
  *  - Gestionar el contenedor donde Cornerstone dibuja el canvas.
- *  - Cargar archivos DICOM (.dcm) por URL.
+ *  - Cargar archivos DICOM (.dcm) por URL: un corte suelto o una serie
+ *    (volumen) que se recorre corte a corte.
  *  - Windowing (ventana / nivel = contraste y brillo).
  *  - Zoom, pan, inversión de grises y reset.
  *
@@ -50,7 +51,13 @@ class DicomViewerEngine {
   #loader; // window.cornerstoneWADOImageLoader
   #image = null; // imagen mostrada actualmente
   #defaultVoi = null; // ventana original del archivo: { ww, wc }
+  #imageIds = []; // ids de Cornerstone de la serie (1 si es un corte suelto)
+  #indice = 0; // corte mostrado (0..n-1)
+  #cargados = 0; // cortes ya descargados (precarga en segundo plano)
   #loadToken = 0; // evita condiciones de carrera si se hacen clics rápidos
+  #corteToken = 0; // idem al cambiar de corte rápido (rueda / slider)
+  #ruedaAcumulada = 0; // trackpads envían deltas pequeños: se acumulan
+  #ajusteManual = false; // true si el usuario hizo zoom/pan (no reajustar al redimensionar)
   #drag = null; // arrastre en curso: { modo, x, y }
   #resizeObserver = null;
   #onChange; // callback opcional invocado en cada render
@@ -152,14 +159,31 @@ class DicomViewerEngine {
    * @throws {DicomViewerError}
    */
   async renderDicom(dicomUrl) {
-    if (!dicomUrl || typeof dicomUrl !== "string") {
+    return this.renderSerie([dicomUrl]);
+  }
+
+  /**
+   * Descarga y muestra una serie (volumen). Muestra el primer corte en cuanto
+   * llega y precarga el resto en segundo plano.
+   * @param {string[]} dicomUrls URLs de los cortes, ya ordenadas.
+   * @returns {Promise<boolean>} true si se mostró; false si otra carga más reciente la reemplazó.
+   * @throws {DicomViewerError}
+   */
+  async renderSerie(dicomUrls) {
+    if (!Array.isArray(dicomUrls) || dicomUrls.length === 0 ||
+        dicomUrls.some((u) => !u || typeof u !== "string")) {
       throw new DicomViewerError("La URL del archivo DICOM está vacía o no es válida.");
     }
 
     const token = ++this.#loadToken;
+    // El prefijo "wadouri:" le dice a Cornerstone que es un .dcm por HTTP.
+    this.#imageIds = dicomUrls.map((url) => `wadouri:${url}`);
+    this.#indice = 0;
+    this.#cargados = 0;
+    this.#ajusteManual = false;
+
     try {
-      // El prefijo "wadouri:" le dice a Cornerstone que es un .dcm por HTTP.
-      const image = await this.#cs.loadImage(`wadouri:${dicomUrl}`);
+      const image = await this.#cargarCorte(0);
       if (token !== this.#loadToken) return false; // llegó tarde: hay una carga más nueva
 
       // La ventana original (la que trae el propio .dcm) se guarda ANTES de
@@ -168,6 +192,8 @@ class DicomViewerEngine {
       this.#defaultVoi = { ww: porDefecto.voi.windowWidth, wc: porDefecto.voi.windowCenter };
       this.#image = image;
       this.#cs.displayImage(this.#element, image);
+
+      this.#precargarResto(token);
       return true;
     } catch (err) {
       if (token !== this.#loadToken) return false;
@@ -178,11 +204,48 @@ class DicomViewerEngine {
     }
   }
 
+  // --- API pública: navegación por la serie ----------------------------------
+  /** @returns {number} Número de cortes de la serie cargada (0 si no hay). */
+  get totalCortes() {
+    return this.#image ? this.#imageIds.length : 0;
+  }
+
+  /**
+   * Muestra el corte i (0..n-1) conservando zoom, posición y ventana.
+   * @param {number} i
+   */
+  async irACorte(i) {
+    if (!this.#image) return;
+    const destino = Math.min(this.#imageIds.length - 1, Math.max(0, Math.round(i)));
+    if (destino === this.#indice) return;
+
+    this.#indice = destino; // se fija ya, para que rueda/teclas encadenen bien
+    const token = ++this.#corteToken;
+    const cargaActual = this.#loadToken;
+    try {
+      const image = await this.#cargarCorte(destino);
+      if (token !== this.#corteToken || cargaActual !== this.#loadToken) return;
+      const vp = this.#cs.getViewport(this.#element);
+      this.#image = image;
+      this.#cs.displayImage(this.#element, image, vp);
+    } catch (err) {
+      console.error(`No se pudo cargar el corte ${destino + 1}:`, err);
+    }
+  }
+
+  /** Avanza (+) o retrocede (-) cortes. */
+  moverCorte(delta) {
+    return this.irACorte(this.#indice + delta);
+  }
+
   /** Quita la imagen actual y deja el visor vacío. */
   clear() {
     this.#loadToken++;
     this.#image = null;
     this.#defaultVoi = null;
+    this.#imageIds = [];
+    this.#indice = 0;
+    this.#cargados = 0;
     this.#cs.disable(this.#element);
     this.#cs.enable(this.#element);
     this.#onChange?.(this.getState());
@@ -221,6 +284,7 @@ class DicomViewerEngine {
   zoom(factor = 1.2) {
     const vp = this.#viewport();
     if (!vp) return;
+    this.#ajusteManual = true;
     vp.scale = Math.min(
       DicomViewerEngine.MAX_SCALE,
       Math.max(DicomViewerEngine.MIN_SCALE, vp.scale * factor)
@@ -236,6 +300,7 @@ class DicomViewerEngine {
   pan(dx = 0, dy = 0) {
     const vp = this.#viewport();
     if (!vp) return;
+    this.#ajusteManual = true;
     // La traslación de Cornerstone está en píxeles de imagen, no de pantalla.
     vp.translation.x += dx / vp.scale;
     vp.translation.y += dy / vp.scale;
@@ -252,7 +317,9 @@ class DicomViewerEngine {
 
   /** Vuelve a zoom, posición, contraste e inversión originales. */
   reset() {
-    if (this.#image) this.#cs.reset(this.#element);
+    if (!this.#image) return;
+    this.#ajusteManual = false;
+    this.#cs.reset(this.#element);
   }
 
   /** Estado actual del visor (para overlays y toolbars). */
@@ -266,6 +333,9 @@ class DicomViewerEngine {
       scale: vp.scale,
       invert: vp.invert,
       ventana: this.#ventanaActual(vp),
+      corte: this.#indice + 1,
+      totalCortes: this.#imageIds.length,
+      cortesCargados: this.#cargados,
     };
   }
 
@@ -286,6 +356,9 @@ class DicomViewerEngine {
       grosorCorte: tag("x00180050"),
       filas: this.#image.rows,
       columnas: this.#image.columns,
+      // Solo hay unidades Hounsfield si es TAC y el archivo trae la recta de
+      // conversión (Rescale Intercept). Las capturas de 8 bits no la tienen.
+      unidadesHounsfield: tag("x00080060") === "CT" && ds?.elements.x00281052 !== undefined,
     };
   }
 
@@ -299,6 +372,7 @@ class DicomViewerEngine {
     el.removeEventListener("pointercancel", this.#onPointerUp);
     el.removeEventListener("wheel", this.#onWheel);
     el.removeEventListener("contextmenu", this.#onContextMenu);
+    el.removeEventListener("keydown", this.#onKeyDown);
     el.removeEventListener("cornerstoneimagerendered", this.#onRendered);
     this.#cs.disable(el);
     this.#image = null;
@@ -320,6 +394,31 @@ class DicomViewerEngine {
     return preset ? preset[0] : "personalizada";
   }
 
+  /** Carga (o recupera de la caché de Cornerstone) el corte i. */
+  #cargarCorte(i) {
+    return this.#cs.loadAndCacheImage(this.#imageIds[i]);
+  }
+
+  /** Descarga el resto de cortes en segundo plano, de 4 en 4. */
+  async #precargarResto(token) {
+    this.#cargados = 1;
+    const pendientes = this.#imageIds.slice(1).map((_, k) => k + 1);
+    const trabajador = async () => {
+      while (pendientes.length && token === this.#loadToken) {
+        const i = pendientes.shift();
+        try {
+          await this.#cargarCorte(i);
+        } catch (err) {
+          console.error(`Fallo al precargar el corte ${i + 1}:`, err);
+        }
+        if (token !== this.#loadToken) return;
+        this.#cargados++;
+        this.#onChange?.(this.getState());
+      }
+    };
+    await Promise.all([trabajador(), trabajador(), trabajador(), trabajador()]);
+  }
+
   /** Copia del viewport actual, o null si no hay imagen cargada. */
   #viewport() {
     return this.#image ? this.#cs.getViewport(this.#element) : null;
@@ -334,11 +433,17 @@ class DicomViewerEngine {
     // passive:false para poder usar preventDefault() y que la página no haga scroll al hacer zoom
     el.addEventListener("wheel", this.#onWheel, { passive: false });
     el.addEventListener("contextmenu", this.#onContextMenu);
+    el.addEventListener("keydown", this.#onKeyDown);
     el.addEventListener("cornerstoneimagerendered", this.#onRendered);
+    // Enfocable para poder recorrer la serie con el teclado
+    if (!el.hasAttribute("tabindex")) el.tabIndex = 0;
 
     // Reajusta el canvas si cambia el tamaño del contenedor (diseño responsivo).
     this.#resizeObserver = new ResizeObserver(() => {
-      if (this.#image) this.#cs.resize(this.#element, false);
+      // El canvas se redimensiona SIEMPRE (también sin imagen: si no, la primera
+      // imagen se ajustaría a un canvas con el tamaño viejo). Si el usuario no
+      // ha tocado zoom/pan, la imagen se reajusta; si lo ha hecho, se respeta.
+      this.#cs.resize(this.#element, Boolean(this.#image) && !this.#ajusteManual);
     });
     this.#resizeObserver.observe(el);
   }
@@ -378,10 +483,45 @@ class DicomViewerEngine {
     }
   };
 
+  // Rueda: en una serie recorre los cortes (como en un PACS); con Ctrl, o en
+  // una imagen suelta, hace zoom.
   #onWheel = (e) => {
     if (!this.#image) return;
     e.preventDefault();
-    this.zoom(e.deltaY < 0 ? 1.1 : 1 / 1.1);
+    if (e.ctrlKey || this.#imageIds.length <= 1) {
+      this.zoom(e.deltaY < 0 ? 1.1 : 1 / 1.1);
+      return;
+    }
+    // deltaMode 0 = píxeles (Chrome; ~100 por "clic" de rueda, pocos en trackpad):
+    // se acumula hasta 100 para avanzar 1 corte por clic. Otros modos (líneas,
+    // ratón en Firefox): 1 corte por evento.
+    if (e.deltaMode !== 0) {
+      this.moverCorte(Math.sign(e.deltaY));
+      return;
+    }
+    this.#ruedaAcumulada += e.deltaY;
+    const pasos = Math.trunc(this.#ruedaAcumulada / 100);
+    if (pasos !== 0) {
+      this.#ruedaAcumulada -= pasos * 100;
+      this.moverCorte(Math.sign(pasos) * Math.min(Math.abs(pasos), 3));
+    }
+  };
+
+  #onKeyDown = (e) => {
+    if (this.#imageIds.length <= 1) return;
+    const n = this.#imageIds.length;
+    const acciones = {
+      ArrowUp: () => this.moverCorte(-1),
+      ArrowDown: () => this.moverCorte(1),
+      PageUp: () => this.moverCorte(-Math.max(1, Math.round(n / 10))),
+      PageDown: () => this.moverCorte(Math.max(1, Math.round(n / 10))),
+      Home: () => this.irACorte(0),
+      End: () => this.irACorte(n - 1),
+    };
+    if (acciones[e.key]) {
+      e.preventDefault();
+      acciones[e.key]();
+    }
   };
 
   #onContextMenu = (e) => e.preventDefault(); // el clic derecho se usa para pan

@@ -173,6 +173,16 @@
     color: #cbd5e1;
 }
 
+/* Barra de cortes vertical (series). writing-mode la pone en vertical con el
+   mínimo arriba, así el corte 1 (craneal) queda arriba como en un PACS. */
+.slider-cortes {
+    writing-mode: vertical-lr;
+    width: 1.25rem;
+    min-height: 0;
+    accent-color: #0ea5e9; /* sky-500 */
+    cursor: ns-resize;
+}
+
 /* Visor DICOM: el canvas que crea Cornerstone debe ocupar todo el contenedor */
 #visor-dicom-canvas canvas {
     display: block;
